@@ -822,13 +822,6 @@ func writeError(w http.ResponseWriter, err error, status int) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-func min(left, right int) int {
-	if left < right {
-		return left
-	}
-	return right
-}
-
 const indexHTML = `<!doctype html>
 <html lang="zh-CN">
 <head>
