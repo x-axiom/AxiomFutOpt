@@ -1,0 +1,365 @@
+{
+  "as_of": "2026-05-25",
+  "requested_end_date": "2026-04-30",
+  "schema": [
+    "date",
+    "exchange",
+    "product",
+    "contract_code",
+    "contract_name",
+    "option_type",
+    "strike",
+    "open",
+    "high",
+    "low",
+    "close",
+    "settle",
+    "prev_settle",
+    "volume",
+    "amount",
+    "open_interest",
+    "open_interest_change",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+    "rho",
+    "implied_vol",
+    "exercise_volume",
+    "source_granularity",
+    "source"
+  ],
+  "sources": {
+    "cffex": {
+      "description": "CFFEX public daily history zip: financial options OHLC, volume, open interest, Delta",
+      "status": "complete_public_daily",
+      "rows": 776594,
+      "files": 8,
+      "first_date": "2019-12-23",
+      "last_date": "2026-04-30",
+      "exchanges": [
+        "CFFEX"
+      ],
+      "products": {
+        "HO": 172062,
+        "IO": 379404,
+        "MO": 225128
+      },
+      "source_granularity": "1d",
+      "outputs": [
+        {
+          "path": "data/china_options/cffex_options_daily_2019.csv.gz",
+          "rows": 1254,
+          "first_date": "2019-12-23",
+          "last_date": "2019-12-31",
+          "bytes": 33341
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2020.csv.gz",
+          "rows": 64076,
+          "first_date": "2020-01-02",
+          "last_date": "2020-12-31",
+          "bytes": 1661324
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2021.csv.gz",
+          "rows": 56504,
+          "first_date": "2021-01-04",
+          "last_date": "2021-12-31",
+          "bytes": 1495558
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2022.csv.gz",
+          "rows": 88882,
+          "first_date": "2022-01-04",
+          "last_date": "2022-12-30",
+          "bytes": 2388649
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2023.csv.gz",
+          "rows": 153816,
+          "first_date": "2023-01-03",
+          "last_date": "2023-12-29",
+          "bytes": 3935387
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2024.csv.gz",
+          "rows": 185550,
+          "first_date": "2024-01-02",
+          "last_date": "2024-12-31",
+          "bytes": 4855318
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2025.csv.gz",
+          "rows": 172342,
+          "first_date": "2025-01-02",
+          "last_date": "2025-12-31",
+          "bytes": 4583327
+        },
+        {
+          "path": "data/china_options/cffex_options_daily_2026.csv.gz",
+          "rows": 54170,
+          "first_date": "2026-01-05",
+          "last_date": "2026-04-30",
+          "bytes": 1520865
+        }
+      ]
+    },
+    "shfe": {
+      "description": "SHFE public daily option endpoint: commodity options OHLC, volume, open interest, Delta, exercise volume",
+      "status": "complete_public_daily",
+      "rows": 4169662,
+      "files": 9,
+      "first_date": "2018-09-21",
+      "last_date": "2026-04-30",
+      "exchanges": [
+        "SHFE"
+      ],
+      "products": {
+        "20号胶期权": 638,
+        "丁二烯橡胶期权": 99204,
+        "原油期权": 174834,
+        "天胶期权": 552896,
+        "氧化铝期权": 111796,
+        "燃料油期权": 48702,
+        "白银期权": 597372,
+        "石油沥青期权": 26820,
+        "纸浆期权": 25304,
+        "胶版印刷纸期权": 15042,
+        "螺纹钢期权": 187976,
+        "铅期权": 44158,
+        "铜(BC)期权": 772,
+        "铜期权": 637732,
+        "铝期权": 623414,
+        "铸造铝合金期权": 33248,
+        "锌期权": 293692,
+        "锡期权": 54726,
+        "镍期权": 78872,
+        "黄金期权": 562464
+      },
+      "source_granularity": "1d",
+      "outputs": [
+        {
+          "path": "data/china_options/shfe_options_daily_2018.csv.gz",
+          "rows": 12714,
+          "first_date": "2018-09-21",
+          "last_date": "2018-12-28",
+          "bytes": 312865
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2019.csv.gz",
+          "rows": 162084,
+          "first_date": "2019-01-02",
+          "last_date": "2019-12-31",
+          "bytes": 3197276
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2020.csv.gz",
+          "rows": 449838,
+          "first_date": "2020-01-02",
+          "last_date": "2020-12-31",
+          "bytes": 8733406
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2021.csv.gz",
+          "rows": 419750,
+          "first_date": "2021-01-04",
+          "last_date": "2021-12-31",
+          "bytes": 9104226
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2022.csv.gz",
+          "rows": 416880,
+          "first_date": "2022-01-04",
+          "last_date": "2022-12-30",
+          "bytes": 9320261
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2023.csv.gz",
+          "rows": 521658,
+          "first_date": "2023-01-03",
+          "last_date": "2023-12-29",
+          "bytes": 12439693
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2024.csv.gz",
+          "rows": 582336,
+          "first_date": "2024-01-02",
+          "last_date": "2024-12-31",
+          "bytes": 13853097
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2025.csv.gz",
+          "rows": 963142,
+          "first_date": "2025-01-02",
+          "last_date": "2025-12-31",
+          "bytes": 21585459
+        },
+        {
+          "path": "data/china_options/shfe_options_daily_2026.csv.gz",
+          "rows": 641260,
+          "first_date": "2026-01-05",
+          "last_date": "2026-04-30",
+          "bytes": 14417855
+        }
+      ]
+    },
+    "czce": {
+      "description": "CZCE public daily option files: commodity options OHLC, volume, open interest, Delta, implied volatility, exercise volume",
+      "status": "complete_public_daily",
+      "rows": 4010928,
+      "files": 10,
+      "first_date": "2017-04-19",
+      "last_date": "2026-04-30",
+      "exchanges": [
+        "CZCE"
+      ],
+      "products": {
+        "AP": 97396,
+        "CF": 368248,
+        "CJ": 98366,
+        "FG": 178636,
+        "MA": 495688,
+        "OI": 164244,
+        "PF": 81828,
+        "PK": 112588,
+        "PL": 19158,
+        "PR": 40346,
+        "PX": 105594,
+        "RM": 402800,
+        "SA": 276368,
+        "SF": 120068,
+        "SH": 102508,
+        "SM": 169818,
+        "SR": 353226,
+        "TA": 473724,
+        "UR": 117040,
+        "ZC": 233284
+      },
+      "source_granularity": "1d",
+      "outputs": [
+        {
+          "path": "data/china_options/czce_options_daily_2017.csv.gz",
+          "rows": 48586,
+          "first_date": "2017-04-19",
+          "last_date": "2017-12-29",
+          "bytes": 948877
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2018.csv.gz",
+          "rows": 63706,
+          "first_date": "2018-01-02",
+          "last_date": "2018-12-28",
+          "bytes": 1255359
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2019.csv.gz",
+          "rows": 88872,
+          "first_date": "2019-01-02",
+          "last_date": "2019-12-31",
+          "bytes": 2135759
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2020.csv.gz",
+          "rows": 319158,
+          "first_date": "2020-01-02",
+          "last_date": "2020-12-31",
+          "bytes": 7419761
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2021.csv.gz",
+          "rows": 417452,
+          "first_date": "2021-01-04",
+          "last_date": "2021-12-31",
+          "bytes": 9646925
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2022.csv.gz",
+          "rows": 452724,
+          "first_date": "2022-01-04",
+          "last_date": "2022-12-30",
+          "bytes": 10396768
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2023.csv.gz",
+          "rows": 291400,
+          "first_date": "2023-01-03",
+          "last_date": "2023-08-29",
+          "bytes": 7234458
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2024.csv.gz",
+          "rows": 972730,
+          "first_date": "2024-01-02",
+          "last_date": "2024-12-31",
+          "bytes": 21859089
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2025.csv.gz",
+          "rows": 990656,
+          "first_date": "2025-01-02",
+          "last_date": "2025-12-31",
+          "bytes": 22727519
+        },
+        {
+          "path": "data/china_options/czce_options_daily_2026.csv.gz",
+          "rows": 365644,
+          "first_date": "2026-01-05",
+          "last_date": "2026-04-30",
+          "bytes": 8489702
+        }
+      ]
+    },
+    "gfex": {
+      "description": "GFEX public daily option endpoint: commodity options OHLC, volume, open interest, Delta, implied volatility, exercise volume",
+      "status": "partial_or_blocked",
+      "rows": 52982,
+      "files": 2,
+      "first_date": "2023-12-22",
+      "last_date": "2024-01-26",
+      "exchanges": [
+        "GFEX"
+      ],
+      "products": {
+        "工业硅": 8782,
+        "碳酸锂": 44200
+      },
+      "source_granularity": "1d",
+      "outputs": [
+        {
+          "path": "data/china_options/gfex_options_daily_2023.csv.gz",
+          "rows": 13526,
+          "first_date": "2023-12-22",
+          "last_date": "2023-12-29",
+          "bytes": 296124
+        },
+        {
+          "path": "data/china_options/gfex_options_daily_2024.csv.gz",
+          "rows": 39456,
+          "first_date": "2024-01-02",
+          "last_date": "2024-01-26",
+          "bytes": 829327
+        }
+      ]
+    },
+    "sse-risk": {
+      "description": "SSE public risk indicator endpoint: ETF option daily Greeks and implied volatility only",
+      "status": "partial_or_blocked",
+      "rows": 0,
+      "files": 0,
+      "first_date": null,
+      "last_date": null,
+      "exchanges": [],
+      "products": {},
+      "source_granularity": "1d_greeks_only",
+      "outputs": []
+    }
+  },
+  "known_limits": {
+    "sse-risk": "Endpoint became unstable/blocked during full run; no final shard kept because full historical pull did not complete.",
+    "gfex": "Endpoint returned EdgeOne/WAF 567 after early 2024 during full run; kept only completed shards present on disk.",
+    "dce": "DCE public endpoint returned HTTP 412 anti-bot HTML from this environment.",
+    "szse": "Available public/AkShare endpoints expose current contracts or daily summary, not full historical per-contract OHLC/Greeks from listing.",
+    "intraday_greeks": "No public exchange source found for full historical 5-minute Greeks; generated files use the smallest stable public granularity found: daily."
+  }
+}
