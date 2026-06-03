@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -27,11 +26,11 @@ const dayLayout = "2006-01-02"
 var (
 	contractCodePattern = regexp.MustCompile(`^([A-Z]{1,3})(\d{4})(?:-([CP])-(\d+(?:\.\d+)?))?$`)
 	imCodePattern       = regexp.MustCompile(`^IM(\d{2})(\d{2})$`)
-	indexTemplate       = template.Must(template.New("index").Parse(indexHTML))
 )
 
 type App struct {
-	store *MarketStore
+	store      *MarketStore
+	staticRoot http.Handler
 }
 
 type MarketStore struct {
@@ -129,7 +128,8 @@ type BacktestResult struct {
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dataDir := flag.String("data-dir", "extracted", "directory containing CFFEX daily CSV files")
-	spotCSV := flag.String("spot-csv", "data/csi1000_000852_daily_ohlc_since_launch.csv", "CSI 1000 daily OHLC CSV")
+	spotCSV := flag.String("spot-csv", "data/csi1000_daily.csv", "CSI 1000 daily OHLC CSV")
+	webDir := flag.String("web-dir", "cmd/web/data", "directory containing frontend static assets")
 	flag.Parse()
 
 	store := &MarketStore{
@@ -138,7 +138,7 @@ func main() {
 		contracts:    make(map[string]ContractInfo),
 		historyCache: make(map[string][]DailyRecord),
 	}
-	app := &App{store: store}
+	app := &App{store: store, staticRoot: http.FileServer(http.Dir(*webDir))}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", app.handleIndex)
@@ -153,14 +153,7 @@ func main() {
 }
 
 func (app *App) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := indexTemplate.Execute(w, nil); err != nil {
-		log.Printf("render index: %v", err)
-	}
+	app.staticRoot.ServeHTTP(w, r)
 }
 
 func (app *App) handleContracts(w http.ResponseWriter, r *http.Request) {
@@ -821,173 +814,3 @@ func writeError(w http.ResponseWriter, err error, status int) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
-
-const indexHTML = `<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Axiom FutOpt</title>
-  <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f7f8fa; color: #172033; }
-    header { height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #dfe3ea; }
-    h1 { font-size: 18px; margin: 0; font-weight: 650; }
-    main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 16px; padding: 16px; }
-    section { background: #ffffff; border: 1px solid #dfe3ea; border-radius: 8px; min-width: 0; }
-    .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #e7ebf1; }
-    .panel-head h2 { font-size: 15px; margin: 0; }
-    .controls { display: grid; grid-template-columns: 1fr 96px 96px; gap: 8px; padding: 12px 14px; }
-    .backtest-controls { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; padding: 12px 14px; }
-    input, select, button { height: 34px; border: 1px solid #c9d1dc; border-radius: 6px; padding: 0 10px; font: inherit; background: #fff; box-sizing: border-box; }
-    button { cursor: pointer; background: #234f8f; color: #fff; border-color: #234f8f; font-weight: 600; }
-    button.secondary { background: #ffffff; color: #234f8f; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { padding: 7px 8px; border-bottom: 1px solid #edf0f4; text-align: right; white-space: nowrap; }
-    th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
-    thead th { position: sticky; top: 0; background: #f2f5f9; z-index: 1; }
-    .table-wrap { max-height: calc(100vh - 210px); overflow: auto; }
-    .contracts { max-height: calc(100vh - 168px); overflow: auto; }
-    .contract-row { cursor: pointer; }
-    .contract-row:hover { background: #eef5ff; }
-    .summary { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; padding: 0 14px 12px; }
-    .metric { border: 1px solid #e2e7ef; border-radius: 6px; padding: 8px 10px; background: #fbfcfe; }
-    .metric span { display: block; color: #657085; font-size: 12px; }
-    .metric strong { display: block; margin-top: 4px; font-size: 16px; }
-    .status { color: #657085; font-size: 12px; padding: 0 14px 12px; min-height: 18px; }
-    .split { display: grid; grid-template-rows: auto 1fr; gap: 16px; min-width: 0; }
-    @media (max-width: 980px) {
-      main { grid-template-columns: 1fr; }
-      .backtest-controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-      .summary { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Axiom FutOpt</h1>
-  </header>
-  <main>
-    <section>
-      <div class="panel-head"><h2>合约</h2><button class="secondary" id="refreshContracts">刷新</button></div>
-      <div class="controls">
-        <input id="contractQuery" value="IM" placeholder="合约代码 / 前缀">
-        <select id="kindFilter"><option value="">全部</option><option value="future">期货</option><option value="option">期权</option></select>
-        <input id="contractLimit" value="200" inputmode="numeric" title="返回数量">
-      </div>
-      <div class="status" id="contractStatus"></div>
-      <div class="contracts">
-        <table>
-          <thead><tr><th>代码</th><th>类型</th><th>首日</th><th>末日</th><th>行数</th></tr></thead>
-          <tbody id="contractsBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <div class="split">
-      <section>
-        <div class="panel-head"><h2 id="historyTitle">历史</h2><input id="historyLimit" value="500" inputmode="numeric" title="历史行数"></div>
-        <div class="status" id="historyStatus"></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>日期</th><th>合约</th><th>开</th><th>高</th><th>低</th><th>收</th><th>结算</th><th>量</th><th>持仓</th><th>Delta</th></tr></thead>
-            <tbody id="historyBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section>
-        <div class="panel-head"><h2>IM 吃贴水回测</h2><button id="runBacktest">运行</button></div>
-        <div class="backtest-controls">
-          <input id="basisYield" value="0.06" title="贴水年化收益率阈值">
-          <input id="rollDays" value="5" inputmode="numeric" title="到期日前移仓天数">
-          <input id="multiplier" value="200" inputmode="numeric" title="合约乘数">
-          <input id="startDate" placeholder="开始 YYYY-MM-DD">
-          <input id="endDate" placeholder="结束 YYYY-MM-DD">
-          <button id="runBacktest2">运行</button>
-        </div>
-        <div class="summary" id="backtestSummary"></div>
-        <div class="status" id="backtestStatus"></div>
-        <div class="table-wrap" style="max-height: 300px;">
-          <table>
-            <thead><tr><th>日期</th><th>动作</th><th>合约</th><th>价格</th><th>现货</th><th>年化贴水</th><th>到期天数</th><th>累计收益</th></tr></thead>
-            <tbody id="eventsBody"></tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <script>
-    const fmt = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
-    const money = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
-
-    async function api(path) {
-      const res = await fetch(path);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || res.statusText);
-      return body;
-    }
-
-	function setStatus(id, text) { document.getElementById(id).textContent = text || ''; }
-	function esc(value) { return String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-    async function loadContracts() {
-      const q = document.getElementById('contractQuery').value.trim();
-      const kind = document.getElementById('kindFilter').value;
-      const limit = document.getElementById('contractLimit').value || '200';
-      setStatus('contractStatus', '加载中...');
-			const data = await api('/api/contracts?q=' + encodeURIComponent(q) + '&kind=' + encodeURIComponent(kind) + '&limit=' + encodeURIComponent(limit));
-      const body = document.getElementById('contractsBody');
-			body.innerHTML = data.contracts.map(c =>
-				'<tr class="contract-row" data-code="' + esc(c.code) + '">' +
-					'<td>' + esc(c.code) + '</td><td>' + esc(c.kind) + '</td><td>' + esc(c.first_date) + '</td><td>' + esc(c.last_date) + '</td><td>' + esc(c.rows) + '</td>' +
-				'</tr>').join('');
-      body.querySelectorAll('tr').forEach(row => row.addEventListener('click', () => loadHistory(row.dataset.code)));
-			setStatus('contractStatus', data.count + ' 个合约');
-      if (data.contracts.length > 0) loadHistory(data.contracts[0].code);
-    }
-
-    async function loadHistory(code) {
-      const limit = document.getElementById('historyLimit').value || '500';
-      setStatus('historyStatus', '加载中...');
-			const data = await api('/api/history?code=' + encodeURIComponent(code) + '&limit=' + encodeURIComponent(limit));
-			document.getElementById('historyTitle').textContent = data.contract.code + ' 历史';
-			document.getElementById('historyBody').innerHTML = data.records.map(r =>
-				'<tr><td>' + esc(r.date) + '</td><td>' + esc(r.code) + '</td><td>' + esc(r.open) + '</td><td>' + esc(r.high) + '</td><td>' + esc(r.low) + '</td><td>' + esc(r.close) + '</td><td>' + esc(r.settle) + '</td><td>' + esc(r.volume) + '</td><td>' + esc(r.open_interest) + '</td><td>' + esc(r.delta) + '</td></tr>').join('');
-			setStatus('historyStatus', data.count + ' 行，区间 ' + data.contract.first_date + ' 到 ' + data.contract.last_date);
-    }
-
-    async function runBacktest() {
-      const params = new URLSearchParams({
-        basis_yield: document.getElementById('basisYield').value || '0.06',
-        roll_days: document.getElementById('rollDays').value || '5',
-        multiplier: document.getElementById('multiplier').value || '200',
-        start: document.getElementById('startDate').value,
-        end: document.getElementById('endDate').value,
-      });
-      setStatus('backtestStatus', '运行中...');
-      const data = await api('/api/backtest?' + params.toString());
-      document.getElementById('backtestSummary').innerHTML = [
-        ['总收益', money.format(data.total_profit)],
-        ['持有天数', data.holding_days],
-        ['移仓次数', data.rolls],
-        ['最终合约', data.final_contract],
-        ['最终结算', fmt.format(data.final_settle)],
-			].map(([k, v]) => '<div class="metric"><span>' + k + '</span><strong>' + v + '</strong></div>').join('');
-			document.getElementById('eventsBody').innerHTML = data.events.map(e =>
-				'<tr><td>' + esc(e.date) + '</td><td>' + esc(e.action) + '</td><td>' + esc(e.code) + '</td><td>' + fmt.format(e.price) + '</td><td>' + fmt.format(e.spot_close) + '</td><td>' + fmt.format(e.annualized_basis * 100) + '%</td><td>' + e.days_to_expiry + '</td><td>' + money.format(e.cumulative_profit) + '</td></tr>').join('');
-			setStatus('backtestStatus', data.start_date + ' 到 ' + data.end_date);
-    }
-
-    document.getElementById('refreshContracts').addEventListener('click', () => loadContracts().catch(e => setStatus('contractStatus', e.message)));
-    document.getElementById('contractQuery').addEventListener('keydown', e => { if (e.key === 'Enter') loadContracts().catch(err => setStatus('contractStatus', err.message)); });
-    document.getElementById('kindFilter').addEventListener('change', () => loadContracts().catch(e => setStatus('contractStatus', e.message)));
-    document.getElementById('historyLimit').addEventListener('keydown', e => { if (e.key === 'Enter') loadContracts().catch(err => setStatus('historyStatus', err.message)); });
-    document.getElementById('runBacktest').addEventListener('click', () => runBacktest().catch(e => setStatus('backtestStatus', e.message)));
-    document.getElementById('runBacktest2').addEventListener('click', () => runBacktest().catch(e => setStatus('backtestStatus', e.message)));
-
-    loadContracts().catch(e => setStatus('contractStatus', e.message));
-  </script>
-</body>
-</html>`

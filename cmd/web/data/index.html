@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Axiom FutOpt</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <style>
+    body {
+      background: #f5f7fb;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+    }
+
+    .panel-table {
+      max-height: 60vh;
+      overflow: auto;
+    }
+
+    .events-table {
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .contract-row {
+      cursor: pointer;
+    }
+
+    .contract-row:hover {
+      background: #eef4ff;
+    }
+
+    .metric-card {
+      min-height: 96px;
+    }
+
+    .table {
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid py-3 app-shell">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Axiom FutOpt</h1>
+        <div class="text-body-secondary small">前后端分离版，前端只走 API。</div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-xl-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span>合约</span>
+            <button class="btn btn-sm btn-outline-primary" id="refreshContracts">刷新</button>
+          </div>
+          <div class="card-body border-bottom">
+            <div class="row g-2">
+              <div class="col-12 col-md-6 col-xl-12">
+                <input class="form-control" id="contractQuery" value="IM" placeholder="合约代码 / 前缀">
+              </div>
+              <div class="col-6 col-md-3 col-xl-6">
+                <select class="form-select" id="kindFilter">
+                  <option value="">全部</option>
+                  <option value="future">期货</option>
+                  <option value="option">期权</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3 col-xl-6">
+                <input class="form-control" id="contractLimit" value="200" inputmode="numeric" title="返回数量">
+              </div>
+            </div>
+          </div>
+          <div class="card-body pt-2">
+            <div class="small text-body-secondary mb-2" id="contractStatus"></div>
+            <div class="panel-table">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>代码</th>
+                    <th>类型</th>
+                    <th>首日</th>
+                    <th>末日</th>
+                    <th class="text-end">行数</th>
+                  </tr>
+                </thead>
+                <tbody id="contractsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-8">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="card shadow-sm">
+              <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <span id="historyTitle">历史</span>
+                <div class="d-flex align-items-center gap-2">
+                  <label class="small text-body-secondary" for="historyLimit">历史行数</label>
+                  <input class="form-control form-control-sm" style="width: 110px;" id="historyLimit" value="500" inputmode="numeric">
+                </div>
+              </div>
+              <div class="card-body pt-2">
+                <div class="small text-body-secondary mb-2" id="historyStatus"></div>
+                <div class="panel-table">
+                  <table class="table table-sm table-striped align-middle mb-0">
+                    <thead class="table-light sticky-top">
+                      <tr>
+                        <th>日期</th>
+                        <th>合约</th>
+                        <th class="text-end">开</th>
+                        <th class="text-end">高</th>
+                        <th class="text-end">低</th>
+                        <th class="text-end">收</th>
+                        <th class="text-end">结算</th>
+                        <th class="text-end">量</th>
+                        <th class="text-end">持仓</th>
+                        <th class="text-end">Delta</th>
+                      </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="card shadow-sm">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span>IM 吃贴水回测</span>
+                <button class="btn btn-primary btn-sm" id="runBacktest">运行</button>
+              </div>
+              <div class="card-body">
+                <div class="row g-2 mb-3">
+                  <div class="col-6 col-md-4 col-xxl-2">
+                    <label class="form-label small text-body-secondary">贴水年化阈值</label>
+                    <input class="form-control" id="basisYield" value="0.06">
+                  </div>
+                  <div class="col-6 col-md-4 col-xxl-2">
+                    <label class="form-label small text-body-secondary">移仓天数</label>
+                    <input class="form-control" id="rollDays" value="5" inputmode="numeric">
+                  </div>
+                  <div class="col-6 col-md-4 col-xxl-2">
+                    <label class="form-label small text-body-secondary">合约乘数</label>
+                    <input class="form-control" id="multiplier" value="200" inputmode="numeric">
+                  </div>
+                  <div class="col-6 col-md-6 col-xxl-3">
+                    <label class="form-label small text-body-secondary">开始</label>
+                    <input class="form-control" id="startDate" placeholder="YYYY-MM-DD">
+                  </div>
+                  <div class="col-6 col-md-6 col-xxl-3">
+                    <label class="form-label small text-body-secondary">结束</label>
+                    <input class="form-control" id="endDate" placeholder="YYYY-MM-DD">
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-3" id="backtestSummary"></div>
+                <div class="small text-body-secondary mb-2" id="backtestStatus"></div>
+
+                <div class="events-table">
+                  <table class="table table-sm table-striped align-middle mb-0">
+                    <thead class="table-light sticky-top">
+                      <tr>
+                        <th>日期</th>
+                        <th>动作</th>
+                        <th>合约</th>
+                        <th class="text-end">价格</th>
+                        <th class="text-end">现货</th>
+                        <th class="text-end">年化贴水</th>
+                        <th class="text-end">到期天数</th>
+                        <th class="text-end">累计收益</th>
+                      </tr>
+                    </thead>
+                    <tbody id="eventsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
