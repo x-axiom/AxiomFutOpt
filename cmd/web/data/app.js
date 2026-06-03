@@ -40,6 +40,16 @@ function renderMetric(title, value) {
   ].join("");
 }
 
+function switchPage(pageId) {
+  document.querySelectorAll(".page-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === pageId);
+  });
+
+  document.querySelectorAll("#topNavTabs .nav-link").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === pageId);
+  });
+}
+
 async function loadContracts() {
   const q = byId("contractQuery").value.trim();
   const kind = byId("kindFilter").value;
@@ -155,6 +165,10 @@ byId("historyLimit").addEventListener("keydown", (event) => {
 
 byId("runBacktest").addEventListener("click", () => {
   runBacktest().catch((error) => setStatus("backtestStatus", error.message));
+});
+
+document.querySelectorAll("#topNavTabs .nav-link").forEach((button) => {
+  button.addEventListener("click", () => switchPage(button.dataset.page));
 });
 
 loadContracts().catch((error) => setStatus("contractStatus", error.message));
