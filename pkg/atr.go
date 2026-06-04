@@ -12,6 +12,7 @@ func AtrOut(n int, path string) {
 
 }
 
-func atr(n int, closes []float64) float64 {
+// $$TR_t = \max(H_t - L_t, \ |H_t - C_{t-1}|, \ |L_t - C_{t-1}|)$$
+func atr(high, low, closePrevious float64) float64 {
 	return 0
 }
