@@ -25,6 +25,7 @@ var contractCodePattern = regexp.MustCompile(`^([A-Z]{1,3})(\d{4})(?:-([CP])-(\d
 type migrationConfig struct {
 	ExtractedDir string
 	DuckDBPath   string
+	StartDate    string
 }
 
 type marketRow struct {
@@ -47,8 +48,9 @@ type marketRow struct {
 
 func main() {
 	config := migrationConfig{}
-	flag.StringVar(&config.ExtractedDir, "extracted-dir", "../../extracted", "directory containing daily CFFEX CSV files")
-	flag.StringVar(&config.DuckDBPath, "duckdb", "data/market.duckdb", "target DuckDB database file")
+	flag.StringVar(&config.ExtractedDir, "extracted-dir", "extracted", "directory containing daily CFFEX CSV files")
+	flag.StringVar(&config.DuckDBPath, "duckdb", "data/duckdb/market.duckdb", "target DuckDB database file")
+	flag.StringVar(&config.StartDate, "start-date", "", "optional start date for incremental migration, format YYYYMMDD")
 	flag.Parse()
 
 	if err := migrate(config); err != nil {
@@ -59,6 +61,11 @@ func main() {
 }
 
 func migrate(config migrationConfig) error {
+	startDate, err := normalizeStartDate(config.StartDate)
+	if err != nil {
+		return err
+	}
+
 	db, err := sql.Open("duckdb", config.DuckDBPath)
 	if err != nil {
 		return fmt.Errorf("open duckdb: %w", err)
@@ -79,11 +86,8 @@ func migrate(config migrationConfig) error {
 		}
 	}()
 
-	if _, err := tx.Exec(`DELETE FROM futures_daily`); err != nil {
-		return fmt.Errorf("clear futures_daily: %w", err)
-	}
-	if _, err := tx.Exec(`DELETE FROM options_daily`); err != nil {
-		return fmt.Errorf("clear options_daily: %w", err)
+	if err := clearTargetRange(tx, startDate); err != nil {
+		return err
 	}
 
 	futuresStmt, err := tx.Prepare(insertSQL("futures_daily"))
@@ -110,7 +114,7 @@ func migrate(config migrationConfig) error {
 		if !ok {
 			return nil
 		}
-		if date < "20250109" {
+		if startDate != "" && date < startDate {
 			return nil
 		}
 
@@ -124,6 +128,37 @@ func migrate(config migrationConfig) error {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 	tx = nil
+	return nil
+}
+
+func normalizeStartDate(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	if _, err := time.ParseInLocation(dateLayout, value, time.Local); err != nil {
+		return "", fmt.Errorf("invalid start-date %q, want YYYYMMDD", raw)
+	}
+	return value, nil
+}
+
+func clearTargetRange(tx *sql.Tx, startDate string) error {
+	if startDate == "" {
+		if _, err := tx.Exec(`DELETE FROM futures_daily`); err != nil {
+			return fmt.Errorf("clear futures_daily: %w", err)
+		}
+		if _, err := tx.Exec(`DELETE FROM options_daily`); err != nil {
+			return fmt.Errorf("clear options_daily: %w", err)
+		}
+		return nil
+	}
+
+	if _, err := tx.Exec(`DELETE FROM futures_daily WHERE trade_date >= ?`, startDate); err != nil {
+		return fmt.Errorf("clear futures_daily from %s: %w", startDate, err)
+	}
+	if _, err := tx.Exec(`DELETE FROM options_daily WHERE trade_date >= ?`, startDate); err != nil {
+		return fmt.Errorf("clear options_daily from %s: %w", startDate, err)
+	}
 	return nil
 }
 
