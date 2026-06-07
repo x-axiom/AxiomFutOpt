@@ -26,6 +26,7 @@ type migrationConfig struct {
 	ExtractedDir string
 	DuckDBPath   string
 	StartDate    string
+	FullHistory  bool
 }
 
 type marketRow struct {
@@ -51,6 +52,7 @@ func main() {
 	flag.StringVar(&config.ExtractedDir, "extracted-dir", "extracted", "directory containing daily CFFEX CSV files")
 	flag.StringVar(&config.DuckDBPath, "duckdb", "data/duckdb/market.duckdb", "target DuckDB database file")
 	flag.StringVar(&config.StartDate, "start-date", "", "optional start date for incremental migration, format YYYYMMDD")
+	flag.BoolVar(&config.FullHistory, "full-history", false, "migrate all historical data")
 	flag.Parse()
 
 	if err := migrate(config); err != nil {
@@ -61,7 +63,7 @@ func main() {
 }
 
 func migrate(config migrationConfig) error {
-	startDate, err := normalizeStartDate(config.StartDate)
+	startDate, err := resolveStartDate(config)
 	if err != nil {
 		return err
 	}
@@ -131,13 +133,20 @@ func migrate(config migrationConfig) error {
 	return nil
 }
 
-func normalizeStartDate(raw string) (string, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
+func resolveStartDate(config migrationConfig) (string, error) {
+	if config.FullHistory {
+		if strings.TrimSpace(config.StartDate) != "" {
+			return "", errors.New("start-date and full-history cannot be used together")
+		}
 		return "", nil
 	}
+
+	value := strings.TrimSpace(config.StartDate)
+	if value == "" {
+		return time.Now().In(time.Local).Format(dateLayout), nil
+	}
 	if _, err := time.ParseInLocation(dateLayout, value, time.Local); err != nil {
-		return "", fmt.Errorf("invalid start-date %q, want YYYYMMDD", raw)
+		return "", fmt.Errorf("invalid start-date %q, want YYYYMMDD", config.StartDate)
 	}
 	return value, nil
 }
