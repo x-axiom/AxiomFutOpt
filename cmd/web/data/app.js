@@ -1,6 +1,8 @@
 const fmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 });
 const money = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
+let straddleContracts = [];
+
 async function api(path) {
   const response = await fetch(path);
   const body = await response.json();
@@ -48,6 +50,112 @@ function switchPage(pageId) {
   document.querySelectorAll("#topNavTabs .nav-link").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === pageId);
   });
+}
+
+function populateSelect(id, values, placeholder, selectedValue = "") {
+  const select = byId(id);
+  const options = [`<option value="">${esc(placeholder)}</option>`].concat(
+    values.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`),
+  );
+  select.innerHTML = options.join("");
+  select.disabled = values.length === 0;
+  if (selectedValue && values.includes(selectedValue)) {
+    select.value = selectedValue;
+  }
+}
+
+function populateFixedSelect(id, value) {
+  const select = byId(id);
+  select.innerHTML = `<option value="${esc(value)}">${esc(value)}</option>`;
+  select.value = value;
+  select.disabled = true;
+}
+
+function uniqueValues(values, numeric = false) {
+  const items = [...new Set(values.filter(Boolean))];
+  return items.sort((left, right) => {
+    if (numeric) {
+      const numericDiff = Number(left) - Number(right);
+      if (numericDiff !== 0) {
+        return numericDiff;
+      }
+    }
+    return String(left).localeCompare(String(right), "zh-CN", { numeric: true });
+  });
+}
+
+function resetStraddleResults() {
+  byId("straddleSummary").innerHTML = "";
+  byId("straddleRows").innerHTML = "";
+  setStatus("straddleBacktestStatus", "");
+}
+
+function resetStraddleSelector(prefix) {
+  populateFixedSelect(`${prefix}OptionType`, prefix === "call" ? "C" : "P");
+  populateSelect(`${prefix}Product`, [], "选择品种");
+  populateSelect(`${prefix}Month`, [], "选择月份");
+  populateSelect(`${prefix}Strike`, [], "选择行权价");
+  byId(`${prefix}ContractCode`).textContent = "先加载可选合约";
+}
+
+function selectedStraddleContract(prefix) {
+  const optionType = prefix === "call" ? "C" : "P";
+  const product = byId(`${prefix}Product`).value;
+  const month = byId(`${prefix}Month`).value;
+  const strike = byId(`${prefix}Strike`).value;
+  if (!product || !month || !strike) {
+    return null;
+  }
+  return straddleContracts.find((contract) => (
+    contract.option_type === optionType
+    && contract.product === product
+    && contract.month === month
+    && contract.strike === strike
+  )) || null;
+}
+
+function renderStraddleSelectorState(prefix) {
+  const selected = selectedStraddleContract(prefix);
+  byId(`${prefix}ContractCode`).textContent = selected
+    ? `${selected.contract_code} | 可交易区间 ${selected.first_date} 至 ${selected.last_date}`
+    : "未选择合约";
+}
+
+function syncStraddleSelector(prefix) {
+  const optionType = prefix === "call" ? "C" : "P";
+  const source = straddleContracts.filter((contract) => contract.option_type === optionType);
+  populateFixedSelect(`${prefix}OptionType`, optionType);
+
+  const currentProduct = byId(`${prefix}Product`).value;
+  const currentMonth = byId(`${prefix}Month`).value;
+  const currentStrike = byId(`${prefix}Strike`).value;
+
+  const products = uniqueValues(source.map((contract) => contract.product));
+  populateSelect(`${prefix}Product`, products, "选择品种", currentProduct);
+
+  const product = byId(`${prefix}Product`).value;
+  const months = product
+    ? uniqueValues(source.filter((contract) => contract.product === product).map((contract) => contract.month))
+    : [];
+  populateSelect(`${prefix}Month`, months, "选择月份", currentMonth);
+
+  const month = byId(`${prefix}Month`).value;
+  const strikes = product && month
+    ? uniqueValues(
+      source
+        .filter((contract) => contract.product === product && contract.month === month)
+        .map((contract) => contract.strike),
+      true,
+    )
+    : [];
+  populateSelect(`${prefix}Strike`, strikes, "选择行权价", currentStrike);
+
+  renderStraddleSelectorState(prefix);
+}
+
+function initStraddleSelectors() {
+  resetStraddleSelector("call");
+  resetStraddleSelector("put");
 }
 
 async function loadContracts() {
@@ -140,6 +248,86 @@ async function runBacktest() {
   setStatus("backtestStatus", `${data.start_date} 到 ${data.end_date}`);
 }
 
+async function loadStraddleContracts() {
+  const start = byId("straddleStartDate").value;
+  const end = byId("straddleEndDate").value;
+  if (!start || !end) {
+    throw new Error("请先选择起止日期");
+  }
+  if (end < start) {
+    throw new Error("结束日期不能早于开始日期");
+  }
+
+  setStatus("straddleContractStatus", "加载可选合约中...");
+  resetStraddleResults();
+
+  const data = await api(`/api/straddle/contracts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  straddleContracts = data.contracts || [];
+  initStraddleSelectors();
+
+  if (straddleContracts.length === 0) {
+    setStatus("straddleContractStatus", "所选区间无可覆盖全程的期权合约");
+    return;
+  }
+
+  syncStraddleSelector("call");
+  syncStraddleSelector("put");
+  setStatus("straddleContractStatus", `已加载 ${data.count} 个可选合约。按 品种 -> 月份 -> C/P -> 行权价 选择。`);
+}
+
+async function runStraddleBacktest() {
+  const start = byId("straddleStartDate").value;
+  const end = byId("straddleEndDate").value;
+  const callContract = selectedStraddleContract("call");
+  const putContract = selectedStraddleContract("put");
+  const callQty = byId("callQuantity").value || "1";
+  const putQty = byId("putQuantity").value || "1";
+
+  if (!start || !end) {
+    throw new Error("请先选择起止日期");
+  }
+  if (!callContract || !putContract) {
+    throw new Error("请分别选定 CALL 和 PUT 合约");
+  }
+  if (Number(callQty) <= 0 || Number(putQty) <= 0) {
+    throw new Error("CALL/PUT 张数必须大于 0");
+  }
+
+  setStatus("straddleBacktestStatus", "运行中...");
+  const params = new URLSearchParams({
+    start,
+    end,
+    call_contract: callContract.contract_code,
+    put_contract: putContract.contract_code,
+    call_qty: callQty,
+    put_qty: putQty,
+  });
+  const data = await api(`/api/straddle/backtest?${params.toString()}`);
+
+  byId("straddleSummary").innerHTML = [
+    ["策略收益", money.format(data.total_profit)],
+    ["初始成本", money.format(data.initial_cost)],
+    ["期末市值", money.format(data.final_value)],
+    ["交易日数", data.trading_days],
+    ["CALL 合约", data.call_contract],
+    ["PUT 合约", data.put_contract],
+  ].map(([title, value]) => renderMetric(title, value)).join("");
+
+  byId("straddleRows").innerHTML = data.rows.map((row) => [
+    "<tr>",
+    `  <td>${esc(row.date)}</td>`,
+    `  <td class="text-end">${money.format(row.call_close)}</td>`,
+    `  <td class="text-end">${money.format(row.put_close)}</td>`,
+    `  <td class="text-end">${money.format(row.call_value)}</td>`,
+    `  <td class="text-end">${money.format(row.put_value)}</td>`,
+    `  <td class="text-end">${money.format(row.total_value)}</td>`,
+    `  <td class="text-end">${money.format(row.total_profit)}</td>`,
+    "</tr>",
+  ].join("")).join("");
+
+  setStatus("straddleBacktestStatus", `${data.actual_start_date} 到 ${data.actual_end_date} | ${data.calculation_note}`);
+}
+
 byId("refreshContracts").addEventListener("click", () => {
   loadContracts().catch((error) => setStatus("contractStatus", error.message));
 });
@@ -167,8 +355,23 @@ byId("runBacktest").addEventListener("click", () => {
   runBacktest().catch((error) => setStatus("backtestStatus", error.message));
 });
 
+byId("loadStraddleContracts").addEventListener("click", () => {
+  loadStraddleContracts().catch((error) => setStatus("straddleContractStatus", error.message));
+});
+
+byId("runStraddleBacktest").addEventListener("click", () => {
+  runStraddleBacktest().catch((error) => setStatus("straddleBacktestStatus", error.message));
+});
+
+["call", "put"].forEach((prefix) => {
+  ["Product", "Month", "Strike"].forEach((field) => {
+    byId(`${prefix}${field}`).addEventListener("change", () => syncStraddleSelector(prefix));
+  });
+});
+
 document.querySelectorAll("#topNavTabs .nav-link").forEach((button) => {
   button.addEventListener("click", () => switchPage(button.dataset.page));
 });
 
+initStraddleSelectors();
 loadContracts().catch((error) => setStatus("contractStatus", error.message));

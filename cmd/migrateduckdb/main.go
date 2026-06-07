@@ -47,7 +47,7 @@ type marketRow struct {
 
 func main() {
 	config := migrationConfig{}
-	flag.StringVar(&config.ExtractedDir, "extracted-dir", "/Users/pingli/Desktop/Github/AxiomFutOpt/extracted", "directory containing daily CFFEX CSV files")
+	flag.StringVar(&config.ExtractedDir, "extracted-dir", "../../extracted", "directory containing daily CFFEX CSV files")
 	flag.StringVar(&config.DuckDBPath, "duckdb", "data/market.duckdb", "target DuckDB database file")
 	flag.Parse()
 
@@ -108,6 +108,9 @@ func migrate(config migrationConfig) error {
 
 		date, ok := dateFromFileName(entry.Name())
 		if !ok {
+			return nil
+		}
+		if date < "20250109" {
 			return nil
 		}
 

@@ -47,6 +47,10 @@
     .page-panel.active {
       display: block;
     }
+
+    .selector-code {
+      min-height: 1.25rem;
+    }
   </style>
 </head>
 <body>
@@ -206,10 +210,122 @@
     </section>
 
     <section class="page-panel" id="page-straddle">
-      <div class="card shadow-sm">
-        <div class="card-body py-5 text-center">
-          <h2 class="h4 mb-3">期权双买回测</h2>
-          <p class="text-body-secondary mb-0">占位页。后续再接策略参数、行情和回测结果。</p>
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+              <span>期权双买回测</span>
+              <button class="btn btn-outline-primary btn-sm" id="loadStraddleContracts">加载可选合约</button>
+            </div>
+            <div class="card-body">
+              <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4 col-xl-3">
+                  <label class="form-label small text-body-secondary">开始日期</label>
+                  <input class="form-control" id="straddleStartDate" type="date">
+                </div>
+                <div class="col-12 col-md-4 col-xl-3">
+                  <label class="form-label small text-body-secondary">结束日期</label>
+                  <input class="form-control" id="straddleEndDate" type="date">
+                </div>
+                <div class="col-12 col-md-4 col-xl-3">
+                  <div class="small text-body-secondary">流程</div>
+                  <div class="small">先选日期，再加载合约，最后手动运行回测。</div>
+                </div>
+              </div>
+              <div class="small text-body-secondary mt-3" id="straddleContractStatus"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+          <div class="card shadow-sm h-100">
+            <div class="card-header">CALL 合约</div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">期权品种</label>
+                  <select class="form-select" id="callProduct"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">合约月份</label>
+                  <select class="form-select" id="callMonth"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">C/P</label>
+                  <select class="form-select" id="callOptionType"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">行权价</label>
+                  <select class="form-select" id="callStrike"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">买入张数</label>
+                  <input class="form-control" id="callQuantity" type="number" min="1" step="1" value="1">
+                </div>
+              </div>
+              <div class="small text-body-secondary mt-3 selector-code" id="callContractCode"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+          <div class="card shadow-sm h-100">
+            <div class="card-header">PUT 合约</div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">期权品种</label>
+                  <select class="form-select" id="putProduct"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">合约月份</label>
+                  <select class="form-select" id="putMonth"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">C/P</label>
+                  <select class="form-select" id="putOptionType"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">行权价</label>
+                  <select class="form-select" id="putStrike"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small text-body-secondary">买入张数</label>
+                  <input class="form-control" id="putQuantity" type="number" min="1" step="1" value="1">
+                </div>
+              </div>
+              <div class="small text-body-secondary mt-3 selector-code" id="putContractCode"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+              <span>双买收益</span>
+              <button class="btn btn-primary btn-sm" id="runStraddleBacktest">运行双买回测</button>
+            </div>
+            <div class="card-body">
+              <div class="row g-2 mb-3" id="straddleSummary"></div>
+              <div class="small text-body-secondary mb-2" id="straddleBacktestStatus"></div>
+              <div class="events-table">
+                <table class="table table-sm table-striped align-middle mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>日期</th>
+                      <th class="text-end">CALL 收盘</th>
+                      <th class="text-end">PUT 收盘</th>
+                      <th class="text-end">CALL 市值</th>
+                      <th class="text-end">PUT 市值</th>
+                      <th class="text-end">组合市值</th>
+                      <th class="text-end">组合收益</th>
+                    </tr>
+                  </thead>
+                  <tbody id="straddleRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

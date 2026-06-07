@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -17,8 +18,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	_ "github.com/duckdb/duckdb-go/v2"
 )
 
 const dayLayout = "2006-01-02"
@@ -31,17 +33,6 @@ var (
 type App struct {
 	store      *MarketStore
 	staticRoot http.Handler
-}
-
-type MarketStore struct {
-	dataDir string
-	spotCSV string
-
-	mu             sync.Mutex
-	contractsReady bool
-	contracts      map[string]ContractInfo
-	historyCache   map[string][]DailyRecord
-	backtestData   *BacktestData
 }
 
 type DataFile struct {
@@ -125,18 +116,57 @@ type BacktestResult struct {
 	Events              []BacktestEvent `json:"events"`
 }
 
+type OptionContractChoice struct {
+	ContractCode string `json:"contract_code"`
+	Product      string `json:"product"`
+	Month        string `json:"month"`
+	OptionType   string `json:"option_type"`
+	Strike       string `json:"strike"`
+	FirstDate    string `json:"first_date"`
+	LastDate     string `json:"last_date"`
+}
+
+type StraddleBacktestRow struct {
+	Date        string  `json:"date"`
+	CallClose   float64 `json:"call_close"`
+	PutClose    float64 `json:"put_close"`
+	CallValue   float64 `json:"call_value"`
+	PutValue    float64 `json:"put_value"`
+	TotalValue  float64 `json:"total_value"`
+	TotalProfit float64 `json:"total_profit"`
+}
+
+type StraddleBacktestResult struct {
+	StartDate       string                `json:"start_date"`
+	EndDate         string                `json:"end_date"`
+	ActualStartDate string                `json:"actual_start_date"`
+	ActualEndDate   string                `json:"actual_end_date"`
+	CallContract    string                `json:"call_contract"`
+	PutContract     string                `json:"put_contract"`
+	CallQuantity    int                   `json:"call_quantity"`
+	PutQuantity     int                   `json:"put_quantity"`
+	TradingDays     int                   `json:"trading_days"`
+	InitialCost     float64               `json:"initial_cost"`
+	FinalValue      float64               `json:"final_value"`
+	TotalProfit     float64               `json:"total_profit"`
+	CalculationNote string                `json:"calculation_note"`
+	Rows            []StraddleBacktestRow `json:"rows"`
+}
+
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dataDir := flag.String("data-dir", "extracted", "directory containing CFFEX daily CSV files")
 	spotCSV := flag.String("spot-csv", "data/csi1000_daily.csv", "CSI 1000 daily OHLC CSV")
+	optionsDB := flag.String("options-db", "data/duckdb/market.duckdb", "DuckDB file containing options_daily")
 	webDir := flag.String("web-dir", "cmd/web/data", "directory containing frontend static assets")
 	flag.Parse()
 
 	store := &MarketStore{
-		dataDir:      *dataDir,
-		spotCSV:      *spotCSV,
-		contracts:    make(map[string]ContractInfo),
-		historyCache: make(map[string][]DailyRecord),
+		dataDir:       *dataDir,
+		spotCSV:       *spotCSV,
+		optionsDBPath: *optionsDB,
+		contracts:     make(map[string]ContractInfo),
+		historyCache:  make(map[string][]DailyRecord),
 	}
 	app := &App{store: store, staticRoot: http.FileServer(http.Dir(*webDir))}
 
@@ -145,6 +175,8 @@ func main() {
 	mux.HandleFunc("/api/contracts", app.handleContracts)
 	mux.HandleFunc("/api/history", app.handleHistory)
 	mux.HandleFunc("/api/backtest", app.handleBacktest)
+	mux.HandleFunc("/api/straddle/contracts", app.handleStraddleContracts)
+	mux.HandleFunc("/api/straddle/backtest", app.handleStraddleBacktest)
 
 	log.Printf("serving on http://localhost%s", *addr)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
@@ -242,121 +274,6 @@ func (app *App) handleBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
-}
-
-func (store *MarketStore) Contracts() ([]ContractInfo, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
-	if !store.contractsReady {
-		if err := store.buildContractIndexLocked(); err != nil {
-			return nil, err
-		}
-	}
-
-	contracts := make([]ContractInfo, 0, len(store.contracts))
-	for _, contract := range store.contracts {
-		contracts = append(contracts, contract)
-	}
-	sort.Slice(contracts, func(i, j int) bool {
-		if contracts[i].Product != contracts[j].Product {
-			return contracts[i].Product < contracts[j].Product
-		}
-		return contracts[i].Code < contracts[j].Code
-	})
-	return contracts, nil
-}
-
-func (store *MarketStore) History(code string) ([]DailyRecord, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
-	if records, ok := store.historyCache[code]; ok {
-		return append([]DailyRecord(nil), records...), nil
-	}
-
-	files, err := dataFiles(store.dataDir)
-	if err != nil {
-		return nil, err
-	}
-	records := make([]DailyRecord, 0, 256)
-	for _, file := range files {
-		if err := readMarketFile(file, func(record DailyRecord) {
-			if record.Code == code {
-				records = append(records, record)
-			}
-		}); err != nil {
-			return nil, err
-		}
-	}
-	if len(records) == 0 {
-		return nil, fmt.Errorf("contract not found: %s", code)
-	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Date < records[j].Date })
-	store.historyCache[code] = append([]DailyRecord(nil), records...)
-	return records, nil
-}
-
-func (store *MarketStore) BacktestData() (*BacktestData, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
-	if store.backtestData != nil {
-		return store.backtestData, nil
-	}
-
-	spots, err := loadSpotClose(store.spotCSV)
-	if err != nil {
-		return nil, err
-	}
-	futures, tradingDays, err := loadIMFutures(store.dataDir)
-	if err != nil {
-		return nil, err
-	}
-	adjustExpiries(futures, tradingDays)
-	store.backtestData = &BacktestData{SpotClose: spots, Futures: futures}
-	return store.backtestData, nil
-}
-
-func (store *MarketStore) buildContractIndexLocked() error {
-	files, err := dataFiles(store.dataDir)
-	if err != nil {
-		return err
-	}
-	contracts := make(map[string]ContractInfo)
-	for _, file := range files {
-		if err := readMarketFile(file, func(record DailyRecord) {
-			product, kind, optionType, strike, ok := parseContractCode(record.Code)
-			if !ok {
-				return
-			}
-			info := contracts[record.Code]
-			if info.Code == "" {
-				info = ContractInfo{
-					Code:       record.Code,
-					Product:    product,
-					Kind:       kind,
-					OptionType: optionType,
-					Strike:     strike,
-					FirstDate:  record.Date,
-					LastDate:   record.Date,
-				}
-			}
-			if record.Date < info.FirstDate {
-				info.FirstDate = record.Date
-			}
-			if record.Date > info.LastDate {
-				info.LastDate = record.Date
-			}
-			info.Rows++
-			contracts[record.Code] = info
-		}); err != nil {
-			return err
-		}
-	}
-	store.contracts = contracts
-	store.contractsReady = true
-	return nil
 }
 
 func dataFiles(root string) ([]DataFile, error) {
@@ -459,6 +376,20 @@ func parseContractCode(code string) (product string, kind string, optionType str
 		return product, "future", "", "", true
 	}
 	return product, "option", matches[3], matches[4], true
+}
+
+func optionContractChoiceFromCode(code string) (OptionContractChoice, bool) {
+	matches := contractCodePattern.FindStringSubmatch(strings.ToUpper(strings.TrimSpace(code)))
+	if matches == nil || matches[3] == "" {
+		return OptionContractChoice{}, false
+	}
+	return OptionContractChoice{
+		ContractCode: strings.ToUpper(strings.TrimSpace(code)),
+		Product:      matches[1],
+		Month:        matches[2],
+		OptionType:   matches[3],
+		Strike:       matches[4],
+	}, true
 }
 
 func infoFromHistory(records []DailyRecord) ContractInfo {
@@ -752,6 +683,51 @@ func optionalDate(raw string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid date %q, want YYYY-MM-DD", raw)
 	}
 	return date, nil
+}
+
+func requiredDate(raw string, fieldName string) (time.Time, error) {
+	date, err := optionalDate(raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if date.IsZero() {
+		return time.Time{}, fmt.Errorf("missing %s", fieldName)
+	}
+	return date, nil
+}
+
+func compactDay(date time.Time) string {
+	return date.Format("20060102")
+}
+
+func displayCompactDay(raw string) string {
+	if len(raw) != 8 {
+		return raw
+	}
+	date, err := time.ParseInLocation("20060102", raw, time.Local)
+	if err != nil {
+		return raw
+	}
+	return date.Format(dayLayout)
+}
+
+func (store *MarketStore) optionsDatabase() (*sql.DB, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	if store.optionsDB != nil {
+		return store.optionsDB, nil
+	}
+	db, err := sql.Open("duckdb", store.optionsDBPath)
+	if err != nil {
+		return nil, fmt.Errorf("open options duckdb: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping options duckdb: %w", err)
+	}
+	store.optionsDB = db
+	return store.optionsDB, nil
 }
 
 func daysBetween(start, end time.Time) int {
