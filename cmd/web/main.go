@@ -182,7 +182,7 @@ type ContinuousStraddleResult struct {
 	RestDays          int                       `json:"rest_days"`
 	ATRFilterMode     string                    `json:"atr_filter_mode"`
 	MaxATRPercent     float64                   `json:"max_atr_pct"`
-	BackoffDays       int                       `json:"backoff_days"`
+	BackoffDate       string                    `json:"backoff_date"`
 	TradingDays       int                       `json:"trading_days"`
 	Entries           int                       `json:"entries"`
 	Exits             int                       `json:"exits"`

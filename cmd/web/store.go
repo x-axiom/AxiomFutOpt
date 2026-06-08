@@ -244,19 +244,23 @@ func (store *MarketStore) RunStraddleBacktest(start, end time.Time, callContract
 	return result, nil
 }
 
-func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int, atrFilterMode string, maxATRPercent float64, backoffDays int) (ContinuousStraddleResult, error) {
+func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int, atrFilterMode string, maxATRPercent float64, backoffDate time.Time) (ContinuousStraddleResult, error) {
 	spots, err := loadSpotSeries(store.spotCSV)
 	if err != nil {
 		return ContinuousStraddleResult{}, err
 	}
-	atrPctMedianBaseline := trailingATRPctMedianByNaturalDays(spots, backoffDays)
+	atrPctMedianBaseline := trailingATRPctMedianFromDate(spots, backoffDate)
 	spotDates := sortedSpotDates(spots, start, end)
 	if len(spotDates) == 0 {
 		return ContinuousStraddleResult{}, errors.New("no CSI1000 spot rows in selected date range")
 	}
 	calculationNote := "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；ATR 过滤模式：固定 ATR% 阈值，未乘合约乘数"
 	if atrFilterMode == "median" {
-		calculationNote = fmt.Sprintf("中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；ATR 过滤模式：当日 ATR%% 低于过去 %d 个自然日 ATR%% 中位数，未乘合约乘数", backoffDays)
+		calculationNote = fmt.Sprintf("中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；ATR 过滤模式：当日 ATR%% 低于自 %s 起到计划交易日的 ATR%% 中位数，未乘合约乘数", backoffDate.Format(dayLayout))
+	}
+	backoffDateValue := ""
+	if !backoffDate.IsZero() {
+		backoffDateValue = backoffDate.Format(dayLayout)
 	}
 
 	result := ContinuousStraddleResult{
@@ -268,7 +272,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 		RestDays:        restDays,
 		ATRFilterMode:   atrFilterMode,
 		MaxATRPercent:   maxATRPercent,
-		BackoffDays:     backoffDays,
+		BackoffDate:     backoffDateValue,
 		CalculationNote: calculationNote,
 		Events:          make([]ContinuousStraddleEvent, 0, 128),
 	}
@@ -472,13 +476,13 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	result.MaxDrawdown = maxDrawdown
 	result.TotalProfit = result.RealizedProfit + result.UnrealizedProfit
 	if result.Entries == 0 {
-		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, ATR filter params, and ATR filter history")
+		result.CalculationNote += "；本区间无开仓，通常表示 ATR 过滤条件、min_dte 或可交易合约共同限制后无有效入场日"
 	}
 	return result, nil
 }
 
-func trailingATRPctMedianByNaturalDays(spots map[string]spotSnapshot, backoffDays int) map[string]float64 {
-	if backoffDays <= 0 {
+func trailingATRPctMedianFromDate(spots map[string]spotSnapshot, backoffDate time.Time) map[string]float64 {
+	if backoffDate.IsZero() {
 		return map[string]float64{}
 	}
 	dates := make([]time.Time, 0, len(spots))
@@ -491,18 +495,14 @@ func trailingATRPctMedianByNaturalDays(spots map[string]spotSnapshot, backoffDay
 	sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
 
 	baseline := make(map[string]float64, len(dates))
-	for idx, date := range dates {
-		cutoff := date.AddDate(0, 0, -backoffDays)
-		window := make([]float64, 0, backoffDays)
-		for historyIdx := idx - 1; historyIdx >= 0; historyIdx-- {
-			historyDate := dates[historyIdx]
-			if historyDate.Before(cutoff) {
-				break
-			}
-			spot := spots[historyDate.Format(dayLayout)]
-			if spot.HasATRPct {
-				window = append(window, spot.ATRPct)
-			}
+	window := make([]float64, 0, len(dates))
+	for _, date := range dates {
+		if date.Before(backoffDate) {
+			continue
+		}
+		spot := spots[date.Format(dayLayout)]
+		if spot.HasATRPct {
+			window = append(window, spot.ATRPct)
 		}
 		if len(window) == 0 {
 			continue

@@ -70,7 +70,11 @@ func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.
 	}
 	sellProfit := floatParam(r, "sell_profit", 0.2)
 	maxATRPercent := floatParam(r, "max_atr_pct", 2.0)
-	backoffDays := intParam(r, "backoff_days", 14)
+	backoffDate, err := optionalDate(r.URL.Query().Get("backoff_date"))
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
 	if sellProfit > 1 {
 		sellProfit = sellProfit / 100
 	}
@@ -98,12 +102,12 @@ func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.
 		writeError(w, errors.New("max_atr_pct must be > 0 when atr_filter_mode=fixed"), http.StatusBadRequest)
 		return
 	}
-	if atrFilterMode == "median" && backoffDays <= 0 {
-		writeError(w, errors.New("backoff_days must be > 0 when atr_filter_mode=median"), http.StatusBadRequest)
+	if atrFilterMode == "median" && backoffDate.IsZero() {
+		writeError(w, errors.New("backoff_date is required when atr_filter_mode=median"), http.StatusBadRequest)
 		return
 	}
 
-	result, err := app.store.RunContinuousStraddleBacktest(start, end, holdDays, minDTE, sellProfit, restDays, atrFilterMode, maxATRPercent, backoffDays)
+	result, err := app.store.RunContinuousStraddleBacktest(start, end, holdDays, minDTE, sellProfit, restDays, atrFilterMode, maxATRPercent, backoffDate)
 	if err != nil {
 		writeError(w, err, http.StatusBadRequest)
 		return

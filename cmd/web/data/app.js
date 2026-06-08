@@ -53,7 +53,10 @@ function formatPercent(value) {
 function syncContinuousAtrFilterMode() {
   const mode = byId("continuousAtrFilterMode").value || "fixed";
   byId("continuousMaxAtrPctGroup").classList.toggle("d-none", mode !== "fixed");
-  byId("continuousBackoffDaysGroup").classList.toggle("d-none", mode !== "median");
+  byId("continuousBackoffDateGroup").classList.toggle("d-none", mode !== "median");
+  if (mode === "median" && !byId("continuousBackoffDate").value) {
+    byId("continuousBackoffDate").value = byId("continuousStartDate").value;
+  }
 }
 
 function switchPage(pageId) {
@@ -351,7 +354,7 @@ async function runContinuousStraddle() {
   const restDays = byId("continuousRestDays").value || "1";
   const atrFilterMode = byId("continuousAtrFilterMode").value || "fixed";
   const maxAtrPct = byId("continuousMaxAtrPct").value || "2.0";
-  const backoffDays = byId("continuousBackoffDays").value || "14";
+  const backoffDate = byId("continuousBackoffDate").value;
 
   if (!start || !end) {
     throw new Error("请先选择起止日期");
@@ -377,8 +380,11 @@ async function runContinuousStraddle() {
   if (atrFilterMode === "fixed" && Number(maxAtrPct) <= 0) {
     throw new Error("固定模式下最大 ATR% 必须大于 0");
   }
-  if (atrFilterMode === "median" && Number(backoffDays) <= 0) {
-    throw new Error("中位数模式下回看自然日必须大于 0");
+  if (atrFilterMode === "median" && !backoffDate) {
+    throw new Error("中位数模式下回看起始日期不能为空");
+  }
+  if (atrFilterMode === "median" && backoffDate > end) {
+    throw new Error("回看起始日期不能晚于结束日期");
   }
 
   setStatus("continuousStatus", "运行中...");
@@ -394,12 +400,12 @@ async function runContinuousStraddle() {
     rest_days: restDays,
     atr_filter_mode: atrFilterMode,
     max_atr_pct: maxAtrPct,
-    backoff_days: backoffDays,
+    backoff_date: backoffDate,
   });
   const data = await api(`/api/continuous-straddle/backtest?${params.toString()}`);
 
   const atrFilterSummary = data.atr_filter_mode === "median"
-    ? `过去${data.backoff_days}个自然日 ATR% 中位数`
+    ? `自${data.backoff_date}起 ATR% 中位数`
     : `固定 ${fmt.format(data.max_atr_pct)}%`;
 
   byId("continuousSummary").innerHTML = [
@@ -480,6 +486,11 @@ byId("runContinuousStraddle").addEventListener("click", () => {
 });
 
 byId("continuousAtrFilterMode").addEventListener("change", syncContinuousAtrFilterMode);
+byId("continuousStartDate").addEventListener("change", () => {
+  if (!byId("continuousBackoffDate").value) {
+    byId("continuousBackoffDate").value = byId("continuousStartDate").value;
+  }
+});
 
 ["call", "put"].forEach((prefix) => {
   ["Product", "Month", "Strike"].forEach((field) => {
