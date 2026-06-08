@@ -26,6 +26,8 @@ go.work.sum
 # 只忽略根目录下的二进制文件
 /web
 /migrateduckdb
+/total
 # 显式允许目录及其内容（可选，作为双重保险）
 !/web/
 !/migrateduckdb/
+!/total/
