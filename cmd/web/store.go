@@ -249,9 +249,14 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	if err != nil {
 		return ContinuousStraddleResult{}, err
 	}
+	atrPctBaseline := trailingATRPctAverage(spots, 14)
 	spotDates := sortedSpotDates(spots, start, end)
 	if len(spotDates) == 0 {
 		return ContinuousStraddleResult{}, errors.New("no CSI1000 spot rows in selected date range")
+	}
+	calculationNote := "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于阈值时开仓，未乘合约乘数"
+	if maxATRPercent == 0 {
+		calculationNote = "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于过去14个交易日 ATR% 均值时开仓，未乘合约乘数"
 	}
 
 	result := ContinuousStraddleResult{
@@ -262,7 +267,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 		SellProfit:      sellProfit,
 		RestDays:        restDays,
 		MaxATRPercent:   maxATRPercent,
-		CalculationNote: "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于阈值时开仓，未乘合约乘数",
+		CalculationNote: calculationNote,
 		Events:          make([]ContinuousStraddleEvent, 0, 128),
 	}
 
@@ -367,11 +372,29 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 			})
 			continue
 		}
-		if atrPct >= maxATRPercent {
+		atrLimit := maxATRPercent
+		atrReason := "atr_limit"
+		if maxATRPercent == 0 {
+			baseline, ok := atrPctBaseline[key]
+			if !ok {
+				result.Events = append(result.Events, ContinuousStraddleEvent{
+					Date:             key,
+					Action:           "wait",
+					Reason:           "atr_history_missing",
+					SpotClose:        spotClose,
+					ATRPct:           atrPct,
+					CumulativeProfit: realizedProfit,
+				})
+				continue
+			}
+			atrLimit = baseline
+			atrReason = "atr_avg_limit"
+		}
+		if atrPct >= atrLimit {
 			result.Events = append(result.Events, ContinuousStraddleEvent{
 				Date:             key,
 				Action:           "wait",
-				Reason:           "atr_limit",
+				Reason:           atrReason,
 				SpotClose:        spotClose,
 				ATRPct:           atrPct,
 				CumulativeProfit: realizedProfit,
@@ -447,9 +470,44 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	result.MaxDrawdown = maxDrawdown
 	result.TotalProfit = result.RealizedProfit + result.UnrealizedProfit
 	if result.Entries == 0 {
-		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, and max_atr_pct")
+		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, max_atr_pct, and ATR filter history")
 	}
 	return result, nil
+}
+
+func trailingATRPctAverage(spots map[string]spotSnapshot, lookback int) map[string]float64 {
+	if lookback <= 0 {
+		return map[string]float64{}
+	}
+	dates := make([]time.Time, 0, len(spots))
+	for key := range spots {
+		date, err := time.ParseInLocation(dayLayout, key, time.Local)
+		if err == nil {
+			dates = append(dates, date)
+		}
+	}
+	sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
+
+	baseline := make(map[string]float64, len(dates))
+	window := make([]float64, 0, lookback)
+	windowSum := 0.0
+	for _, date := range dates {
+		key := date.Format(dayLayout)
+		spot := spots[key]
+		if len(window) == lookback {
+			baseline[key] = windowSum / float64(lookback)
+		}
+		if !spot.HasATRPct {
+			continue
+		}
+		window = append(window, spot.ATRPct)
+		windowSum += spot.ATRPct
+		if len(window) > lookback {
+			windowSum -= window[0]
+			window = window[1:]
+		}
+	}
+	return baseline
 }
 
 func profitLossRatio(tradeProfits []float64) float64 {

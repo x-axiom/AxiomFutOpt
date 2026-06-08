@@ -363,8 +363,8 @@ async function runContinuousStraddle() {
   if (Number(restDays) < 0) {
     throw new Error("休整交易日必须大于等于 0");
   }
-  if (Number(maxAtrPct) <= 0) {
-    throw new Error("最大 ATR% 必须大于 0");
+  if (Number(maxAtrPct) < 0) {
+    throw new Error("最大 ATR% 必须大于等于 0");
   }
 
   setStatus("continuousStatus", "运行中...");
@@ -393,7 +393,7 @@ async function runContinuousStraddle() {
     ["Sharpe", typeof data.sharpe_ratio === "number" ? fmt.format(data.sharpe_ratio) : "-"],
     ["Alpha", formatPercent(data.alpha)],
     ["最大回撤", formatPercent(data.max_drawdown)],
-    ["最大 ATR%", typeof data.max_atr_pct === "number" ? `${fmt.format(data.max_atr_pct)}%` : "-"],
+    ["最大 ATR%", typeof data.max_atr_pct === "number" ? (data.max_atr_pct === 0 ? "过去14日 ATR% 均值" : `${fmt.format(data.max_atr_pct)}%`) : "-"],
     ["交易日数", data.trading_days],
     ["最终持仓", data.final_position_open ? "持有中" : "空仓"],
   ].map(([title, value]) => renderMetric(title, value)).join("");

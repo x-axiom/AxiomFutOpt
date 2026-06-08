@@ -85,8 +85,8 @@ func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.
 		writeError(w, errors.New("sell_profit must be > 0"), http.StatusBadRequest)
 		return
 	}
-	if maxATRPercent <= 0 {
-		writeError(w, errors.New("max_atr_pct must be > 0"), http.StatusBadRequest)
+	if maxATRPercent < 0 {
+		writeError(w, errors.New("max_atr_pct must be >= 0"), http.StatusBadRequest)
 		return
 	}
 
