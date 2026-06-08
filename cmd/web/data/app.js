@@ -50,6 +50,12 @@ function formatPercent(value) {
   return typeof value === "number" ? `${fmt.format(value * 100)}%` : "-";
 }
 
+function syncContinuousAtrFilterMode() {
+  const mode = byId("continuousAtrFilterMode").value || "fixed";
+  byId("continuousMaxAtrPctGroup").classList.toggle("d-none", mode !== "fixed");
+  byId("continuousBackoffDaysGroup").classList.toggle("d-none", mode !== "median");
+}
+
 function switchPage(pageId) {
   document.querySelectorAll(".page-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === pageId);
@@ -343,7 +349,9 @@ async function runContinuousStraddle() {
   const minDte = byId("continuousMinDte").value || "30";
   const sellProfit = byId("continuousSellProfit").value || "0.2";
   const restDays = byId("continuousRestDays").value || "1";
+  const atrFilterMode = byId("continuousAtrFilterMode").value || "fixed";
   const maxAtrPct = byId("continuousMaxAtrPct").value || "2.0";
+  const backoffDays = byId("continuousBackoffDays").value || "14";
 
   if (!start || !end) {
     throw new Error("请先选择起止日期");
@@ -363,8 +371,14 @@ async function runContinuousStraddle() {
   if (Number(restDays) < 0) {
     throw new Error("休整交易日必须大于等于 0");
   }
-  if (Number(maxAtrPct) < 0) {
-    throw new Error("最大 ATR% 必须大于等于 0");
+  if (!["fixed", "median"].includes(atrFilterMode)) {
+    throw new Error("ATR 过滤模式无效");
+  }
+  if (atrFilterMode === "fixed" && Number(maxAtrPct) <= 0) {
+    throw new Error("固定模式下最大 ATR% 必须大于 0");
+  }
+  if (atrFilterMode === "median" && Number(backoffDays) <= 0) {
+    throw new Error("中位数模式下回看自然日必须大于 0");
   }
 
   setStatus("continuousStatus", "运行中...");
@@ -378,9 +392,15 @@ async function runContinuousStraddle() {
     min_dte: minDte,
     sell_profit: sellProfit,
     rest_days: restDays,
+    atr_filter_mode: atrFilterMode,
     max_atr_pct: maxAtrPct,
+    backoff_days: backoffDays,
   });
   const data = await api(`/api/continuous-straddle/backtest?${params.toString()}`);
+
+  const atrFilterSummary = data.atr_filter_mode === "median"
+    ? `过去${data.backoff_days}个自然日 ATR% 中位数`
+    : `固定 ${fmt.format(data.max_atr_pct)}%`;
 
   byId("continuousSummary").innerHTML = [
     ["总收益", money.format(data.total_profit)],
@@ -393,7 +413,7 @@ async function runContinuousStraddle() {
     ["Sharpe", typeof data.sharpe_ratio === "number" ? fmt.format(data.sharpe_ratio) : "-"],
     ["Alpha", formatPercent(data.alpha)],
     ["最大回撤", formatPercent(data.max_drawdown)],
-    ["最大 ATR%", typeof data.max_atr_pct === "number" ? (data.max_atr_pct === 0 ? "过去14日 ATR% 均值" : `${fmt.format(data.max_atr_pct)}%`) : "-"],
+    ["ATR过滤", atrFilterSummary],
     ["交易日数", data.trading_days],
     ["最终持仓", data.final_position_open ? "持有中" : "空仓"],
   ].map(([title, value]) => renderMetric(title, value)).join("");
@@ -459,6 +479,8 @@ byId("runContinuousStraddle").addEventListener("click", () => {
   runContinuousStraddle().catch((error) => setStatus("continuousStatus", error.message));
 });
 
+byId("continuousAtrFilterMode").addEventListener("change", syncContinuousAtrFilterMode);
+
 ["call", "put"].forEach((prefix) => {
   ["Product", "Month", "Strike"].forEach((field) => {
     byId(`${prefix}${field}`).addEventListener("change", () => syncStraddleSelector(prefix));
@@ -469,5 +491,6 @@ document.querySelectorAll("#topNavTabs .nav-link").forEach((button) => {
   button.addEventListener("click", () => switchPage(button.dataset.page));
 });
 
+syncContinuousAtrFilterMode();
 initStraddleSelectors();
 loadContracts().catch((error) => setStatus("contractStatus", error.message));

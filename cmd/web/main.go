@@ -180,7 +180,9 @@ type ContinuousStraddleResult struct {
 	MinDTE            int                       `json:"min_dte"`
 	SellProfit        float64                   `json:"sell_profit"`
 	RestDays          int                       `json:"rest_days"`
+	ATRFilterMode     string                    `json:"atr_filter_mode"`
 	MaxATRPercent     float64                   `json:"max_atr_pct"`
+	BackoffDays       int                       `json:"backoff_days"`
 	TradingDays       int                       `json:"trading_days"`
 	Entries           int                       `json:"entries"`
 	Exits             int                       `json:"exits"`

@@ -244,19 +244,19 @@ func (store *MarketStore) RunStraddleBacktest(start, end time.Time, callContract
 	return result, nil
 }
 
-func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int, maxATRPercent float64) (ContinuousStraddleResult, error) {
+func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int, atrFilterMode string, maxATRPercent float64, backoffDays int) (ContinuousStraddleResult, error) {
 	spots, err := loadSpotSeries(store.spotCSV)
 	if err != nil {
 		return ContinuousStraddleResult{}, err
 	}
-	atrPctBaseline := trailingATRPctAverage(spots, 14)
+	atrPctMedianBaseline := trailingATRPctMedianByNaturalDays(spots, backoffDays)
 	spotDates := sortedSpotDates(spots, start, end)
 	if len(spotDates) == 0 {
 		return ContinuousStraddleResult{}, errors.New("no CSI1000 spot rows in selected date range")
 	}
-	calculationNote := "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于阈值时开仓，未乘合约乘数"
-	if maxATRPercent == 0 {
-		calculationNote = "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于过去14个交易日 ATR% 均值时开仓，未乘合约乘数"
+	calculationNote := "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；ATR 过滤模式：固定 ATR% 阈值，未乘合约乘数"
+	if atrFilterMode == "median" {
+		calculationNote = fmt.Sprintf("中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；ATR 过滤模式：当日 ATR%% 低于过去 %d 个自然日 ATR%% 中位数，未乘合约乘数", backoffDays)
 	}
 
 	result := ContinuousStraddleResult{
@@ -266,7 +266,9 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 		MinDTE:          minDTE,
 		SellProfit:      sellProfit,
 		RestDays:        restDays,
+		ATRFilterMode:   atrFilterMode,
 		MaxATRPercent:   maxATRPercent,
+		BackoffDays:     backoffDays,
 		CalculationNote: calculationNote,
 		Events:          make([]ContinuousStraddleEvent, 0, 128),
 	}
@@ -374,8 +376,8 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 		}
 		atrLimit := maxATRPercent
 		atrReason := "atr_limit"
-		if maxATRPercent == 0 {
-			baseline, ok := atrPctBaseline[key]
+		if atrFilterMode == "median" {
+			baseline, ok := atrPctMedianBaseline[key]
 			if !ok {
 				result.Events = append(result.Events, ContinuousStraddleEvent{
 					Date:             key,
@@ -388,7 +390,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 				continue
 			}
 			atrLimit = baseline
-			atrReason = "atr_avg_limit"
+			atrReason = "atr_median_limit"
 		}
 		if atrPct >= atrLimit {
 			result.Events = append(result.Events, ContinuousStraddleEvent{
@@ -470,13 +472,13 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	result.MaxDrawdown = maxDrawdown
 	result.TotalProfit = result.RealizedProfit + result.UnrealizedProfit
 	if result.Entries == 0 {
-		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, max_atr_pct, and ATR filter history")
+		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, ATR filter params, and ATR filter history")
 	}
 	return result, nil
 }
 
-func trailingATRPctAverage(spots map[string]spotSnapshot, lookback int) map[string]float64 {
-	if lookback <= 0 {
+func trailingATRPctMedianByNaturalDays(spots map[string]spotSnapshot, backoffDays int) map[string]float64 {
+	if backoffDays <= 0 {
 		return map[string]float64{}
 	}
 	dates := make([]time.Time, 0, len(spots))
@@ -489,25 +491,38 @@ func trailingATRPctAverage(spots map[string]spotSnapshot, lookback int) map[stri
 	sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
 
 	baseline := make(map[string]float64, len(dates))
-	window := make([]float64, 0, lookback)
-	windowSum := 0.0
-	for _, date := range dates {
-		key := date.Format(dayLayout)
-		spot := spots[key]
-		if len(window) == lookback {
-			baseline[key] = windowSum / float64(lookback)
+	for idx, date := range dates {
+		cutoff := date.AddDate(0, 0, -backoffDays)
+		window := make([]float64, 0, backoffDays)
+		for historyIdx := idx - 1; historyIdx >= 0; historyIdx-- {
+			historyDate := dates[historyIdx]
+			if historyDate.Before(cutoff) {
+				break
+			}
+			spot := spots[historyDate.Format(dayLayout)]
+			if spot.HasATRPct {
+				window = append(window, spot.ATRPct)
+			}
 		}
-		if !spot.HasATRPct {
+		if len(window) == 0 {
 			continue
 		}
-		window = append(window, spot.ATRPct)
-		windowSum += spot.ATRPct
-		if len(window) > lookback {
-			windowSum -= window[0]
-			window = window[1:]
-		}
+		baseline[date.Format(dayLayout)] = medianFloat(window)
 	}
 	return baseline
+}
+
+func medianFloat(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	middle := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[middle]
+	}
+	return (sorted[middle-1] + sorted[middle]) / 2
 }
 
 func profitLossRatio(tradeProfits []float64) float64 {

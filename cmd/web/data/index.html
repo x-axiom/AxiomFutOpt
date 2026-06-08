@@ -368,12 +368,23 @@
                   <input class="form-control" id="continuousRestDays" type="number" min="0" step="1" value="1">
                 </div>
                 <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">ATR 过滤模式</label>
+                  <select class="form-select" id="continuousAtrFilterMode">
+                    <option value="fixed" selected>固定阈值</option>
+                    <option value="median">自然日中位数</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-4 col-xl-2" id="continuousMaxAtrPctGroup">
                   <label class="form-label small text-body-secondary">最大 ATR%</label>
-                  <input class="form-control" id="continuousMaxAtrPct" type="number" min="0" step="0.01" value="2.0">
+                  <input class="form-control" id="continuousMaxAtrPct" type="number" min="0.0001" step="0.01" value="2.0">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2 d-none" id="continuousBackoffDaysGroup">
+                  <label class="form-label small text-body-secondary">回看自然日</label>
+                  <input class="form-control" id="continuousBackoffDays" type="number" min="1" step="1" value="14">
                 </div>
               </div>
               <div class="small text-body-secondary mt-3">
-                收盘建仓和平仓；自动选 MO 期权最近满足 DTE 的上下 ATM CALL/PUT，各 1 张；`max-atr-pct > 0` 时按固定 ATR% 阈值过滤，`max-atr-pct = 0` 时按过去14个交易日 ATR% 均值过滤。
+                收盘建仓和平仓；自动选 MO 期权最近满足 DTE 的上下 ATM CALL/PUT，各 1 张；可选固定 ATR% 阈值过滤，或“过去 N 个自然日 ATR% 中位数”过滤。
               </div>
             </div>
           </div>
