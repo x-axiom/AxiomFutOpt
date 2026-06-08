@@ -244,8 +244,8 @@ func (store *MarketStore) RunStraddleBacktest(start, end time.Time, callContract
 	return result, nil
 }
 
-func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int) (ContinuousStraddleResult, error) {
-	spots, err := loadSpotClose(store.spotCSV)
+func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, holdDays, minDTE int, sellProfit float64, restDays int, maxATRPercent float64) (ContinuousStraddleResult, error) {
+	spots, err := loadSpotSeries(store.spotCSV)
 	if err != nil {
 		return ContinuousStraddleResult{}, err
 	}
@@ -261,7 +261,8 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 		MinDTE:          minDTE,
 		SellProfit:      sellProfit,
 		RestDays:        restDays,
-		CalculationNote: "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓，未乘合约乘数",
+		MaxATRPercent:   maxATRPercent,
+		CalculationNote: "中证1000 MO 期权，按指数 close 选上下 ATM，按期权 close 建平仓；仅当当日 ATR% 低于阈值时开仓，未乘合约乘数",
 		Events:          make([]ContinuousStraddleEvent, 0, 128),
 	}
 
@@ -280,7 +281,9 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	for _, date := range spotDates {
 		result.TradingDays++
 		key := date.Format(dayLayout)
-		spotClose := spots[key]
+		spot := spots[key]
+		spotClose := spot.Close
+		atrPct := spot.ATRPct
 		excludedExpiry = nil
 		strategyDailyReturn := 0.0
 
@@ -315,6 +318,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 						CallContract:     position.CallContract,
 						PutContract:      position.PutContract,
 						SpotClose:        spotClose,
+						ATRPct:           atrPct,
 						SpotChangePct:    spotChangePct,
 						CallClose:        callClose,
 						PutClose:         putClose,
@@ -346,10 +350,32 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 				Action:            "rest",
 				Reason:            "rest_days",
 				SpotClose:         spotClose,
+				ATRPct:            atrPct,
 				CumulativeProfit:  realizedProfit,
 				RestDaysRemaining: restRemaining,
 			})
 			restRemaining--
+			continue
+		}
+		if !spot.HasATRPct {
+			result.Events = append(result.Events, ContinuousStraddleEvent{
+				Date:             key,
+				Action:           "wait",
+				Reason:           "atr_missing",
+				SpotClose:        spotClose,
+				CumulativeProfit: realizedProfit,
+			})
+			continue
+		}
+		if atrPct >= maxATRPercent {
+			result.Events = append(result.Events, ContinuousStraddleEvent{
+				Date:             key,
+				Action:           "wait",
+				Reason:           "atr_limit",
+				SpotClose:        spotClose,
+				ATRPct:           atrPct,
+				CumulativeProfit: realizedProfit,
+			})
 			continue
 		}
 
@@ -380,6 +406,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 			CallContract:     callQuote.ContractCode,
 			PutContract:      putQuote.ContractCode,
 			SpotClose:        spotClose,
+			ATRPct:           atrPct,
 			CallClose:        callQuote.Close,
 			PutClose:         putQuote.Close,
 			PositionValue:    entryValue,
@@ -420,7 +447,7 @@ func (store *MarketStore) RunContinuousStraddleBacktest(start, end time.Time, ho
 	result.MaxDrawdown = maxDrawdown
 	result.TotalProfit = result.RealizedProfit + result.UnrealizedProfit
 	if result.Entries == 0 {
-		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range and min_dte")
+		return ContinuousStraddleResult{}, errors.New("no strategy entry; check date range, min_dte, and max_atr_pct")
 	}
 	return result, nil
 }
@@ -540,7 +567,7 @@ func spotMovePct(entrySpot float64, currentSpot float64) float64 {
 	return math.Abs(currentSpot/entrySpot - 1)
 }
 
-func sortedSpotDates(spots map[string]float64, start, end time.Time) []time.Time {
+func sortedSpotDates(spots map[string]spotSnapshot, start, end time.Time) []time.Time {
 	dates := make([]time.Time, 0, len(spots))
 	for key := range spots {
 		date, err := time.ParseInLocation(dayLayout, key, time.Local)

@@ -343,6 +343,7 @@ async function runContinuousStraddle() {
   const minDte = byId("continuousMinDte").value || "30";
   const sellProfit = byId("continuousSellProfit").value || "0.2";
   const restDays = byId("continuousRestDays").value || "1";
+  const maxAtrPct = byId("continuousMaxAtrPct").value || "2.0";
 
   if (!start || !end) {
     throw new Error("请先选择起止日期");
@@ -362,6 +363,9 @@ async function runContinuousStraddle() {
   if (Number(restDays) < 0) {
     throw new Error("休整交易日必须大于等于 0");
   }
+  if (Number(maxAtrPct) <= 0) {
+    throw new Error("最大 ATR% 必须大于 0");
+  }
 
   setStatus("continuousStatus", "运行中...");
   byId("continuousSummary").innerHTML = "";
@@ -374,6 +378,7 @@ async function runContinuousStraddle() {
     min_dte: minDte,
     sell_profit: sellProfit,
     rest_days: restDays,
+    max_atr_pct: maxAtrPct,
   });
   const data = await api(`/api/continuous-straddle/backtest?${params.toString()}`);
 
@@ -388,6 +393,7 @@ async function runContinuousStraddle() {
     ["Sharpe", typeof data.sharpe_ratio === "number" ? fmt.format(data.sharpe_ratio) : "-"],
     ["Alpha", formatPercent(data.alpha)],
     ["最大回撤", formatPercent(data.max_drawdown)],
+    ["最大 ATR%", typeof data.max_atr_pct === "number" ? `${fmt.format(data.max_atr_pct)}%` : "-"],
     ["交易日数", data.trading_days],
     ["最终持仓", data.final_position_open ? "持有中" : "空仓"],
   ].map(([title, value]) => renderMetric(title, value)).join("");
@@ -400,6 +406,7 @@ async function runContinuousStraddle() {
     `  <td>${esc(event.call_contract || "")}</td>`,
     `  <td>${esc(event.put_contract || "")}</td>`,
     `  <td class="text-end">${formatOptionalNumber(event.spot_close, fmt)}</td>`,
+    `  <td class="text-end">${typeof event.atr_pct === "number" ? `${fmt.format(event.atr_pct)}%` : ""}</td>`,
     `  <td class="text-end">${typeof event.spot_change_pct === "number" ? `${fmt.format(event.spot_change_pct * 100)}%` : ""}</td>`,
     `  <td class="text-end">${formatOptionalNumber(event.position_value, money)}</td>`,
     `  <td class="text-end">${formatOptionalNumber(event.trade_profit, money)}</td>`,

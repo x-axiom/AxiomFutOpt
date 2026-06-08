@@ -65,6 +65,7 @@ func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.
 	minDTE := intParam(r, "min_dte", 30)
 	restDays := intParam(r, "rest_days", 1)
 	sellProfit := floatParam(r, "sell_profit", 0.2)
+	maxATRPercent := floatParam(r, "max_atr_pct", 2.0)
 	if sellProfit > 1 {
 		sellProfit = sellProfit / 100
 	}
@@ -84,8 +85,12 @@ func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.
 		writeError(w, errors.New("sell_profit must be > 0"), http.StatusBadRequest)
 		return
 	}
+	if maxATRPercent <= 0 {
+		writeError(w, errors.New("max_atr_pct must be > 0"), http.StatusBadRequest)
+		return
+	}
 
-	result, err := app.store.RunContinuousStraddleBacktest(start, end, holdDays, minDTE, sellProfit, restDays)
+	result, err := app.store.RunContinuousStraddleBacktest(start, end, holdDays, minDTE, sellProfit, restDays, maxATRPercent)
 	if err != nil {
 		writeError(w, err, http.StatusBadRequest)
 		return

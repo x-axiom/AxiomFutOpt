@@ -160,6 +160,7 @@ type ContinuousStraddleEvent struct {
 	CallContract      string  `json:"call_contract,omitempty"`
 	PutContract       string  `json:"put_contract,omitempty"`
 	SpotClose         float64 `json:"spot_close"`
+	ATRPct            float64 `json:"atr_pct"`
 	SpotChangePct     float64 `json:"spot_change_pct"`
 	CallClose         float64 `json:"call_close"`
 	PutClose          float64 `json:"put_close"`
@@ -179,6 +180,7 @@ type ContinuousStraddleResult struct {
 	MinDTE            int                       `json:"min_dte"`
 	SellProfit        float64                   `json:"sell_profit"`
 	RestDays          int                       `json:"rest_days"`
+	MaxATRPercent     float64                   `json:"max_atr_pct"`
 	TradingDays       int                       `json:"trading_days"`
 	Entries           int                       `json:"entries"`
 	Exits             int                       `json:"exits"`
@@ -194,6 +196,12 @@ type ContinuousStraddleResult struct {
 	FinalValue        float64                   `json:"final_value"`
 	CalculationNote   string                    `json:"calculation_note"`
 	Events            []ContinuousStraddleEvent `json:"events"`
+}
+
+type spotSnapshot struct {
+	Close     float64
+	ATRPct    float64
+	HasATRPct bool
 }
 
 func main() {
@@ -454,6 +462,18 @@ func infoFromHistory(records []DailyRecord) ContractInfo {
 }
 
 func loadSpotClose(path string) (map[string]float64, error) {
+	series, err := loadSpotSeries(path)
+	if err != nil {
+		return nil, err
+	}
+	spots := make(map[string]float64, len(series))
+	for date, snapshot := range series {
+		spots[date] = snapshot.Close
+	}
+	return spots, nil
+}
+
+func loadSpotSeries(path string) (map[string]spotSnapshot, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open spot csv: %w", err)
@@ -462,10 +482,18 @@ func loadSpotClose(path string) (map[string]float64, error) {
 
 	reader := csv.NewReader(f)
 	reader.FieldsPerRecord = -1
-	if _, err := reader.Read(); err != nil {
+	header, err := reader.Read()
+	if err != nil {
 		return nil, fmt.Errorf("read spot header: %w", err)
 	}
-	spots := make(map[string]float64)
+	atrPctIndex := -1
+	for idx, name := range header {
+		if strings.EqualFold(strings.TrimSpace(name), "atr_pct") {
+			atrPctIndex = idx
+			break
+		}
+	}
+	spots := make(map[string]spotSnapshot)
 	for {
 		row, err := reader.Read()
 		if errors.Is(err, io.EOF) {
@@ -477,11 +505,19 @@ func loadSpotClose(path string) (map[string]float64, error) {
 		if len(row) < 5 {
 			continue
 		}
+		date := strings.TrimSpace(row[0])
 		closePrice, err := parseFloat(row[4])
 		if err != nil || closePrice <= 0 {
 			continue
 		}
-		spots[strings.TrimSpace(row[0])] = closePrice
+		snapshot := spotSnapshot{Close: closePrice}
+		if atrPctIndex >= 0 && atrPctIndex < len(row) {
+			if atrPct, err := parseFloat(row[atrPctIndex]); err == nil && atrPct > 0 {
+				snapshot.ATRPct = atrPct
+				snapshot.HasATRPct = true
+			}
+		}
+		spots[date] = snapshot
 	}
 	if len(spots) == 0 {
 		return nil, errors.New("spot csv has no valid rows")
