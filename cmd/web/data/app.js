@@ -42,6 +42,14 @@ function renderMetric(title, value) {
   ].join("");
 }
 
+function formatOptionalNumber(value, formatter) {
+  return typeof value === "number" ? formatter.format(value) : "";
+}
+
+function formatPercent(value) {
+  return typeof value === "number" ? `${fmt.format(value * 100)}%` : "-";
+}
+
 function switchPage(pageId) {
   document.querySelectorAll(".page-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === pageId);
@@ -328,6 +336,83 @@ async function runStraddleBacktest() {
   setStatus("straddleBacktestStatus", `${data.actual_start_date} 到 ${data.actual_end_date} | ${data.calculation_note}`);
 }
 
+async function runContinuousStraddle() {
+  const start = byId("continuousStartDate").value;
+  const end = byId("continuousEndDate").value;
+  const holdDays = byId("continuousHoldDays").value || "10";
+  const minDte = byId("continuousMinDte").value || "30";
+  const sellProfit = byId("continuousSellProfit").value || "0.2";
+  const restDays = byId("continuousRestDays").value || "1";
+
+  if (!start || !end) {
+    throw new Error("请先选择起止日期");
+  }
+  if (end < start) {
+    throw new Error("结束日期不能早于开始日期");
+  }
+  if (Number(holdDays) <= 0) {
+    throw new Error("最大持有自然日必须大于 0");
+  }
+  if (Number(minDte) < 0) {
+    throw new Error("最小 DTE 必须大于等于 0");
+  }
+  if (Number(sellProfit) <= 0) {
+    throw new Error("指数波动比例必须大于 0");
+  }
+  if (Number(restDays) < 0) {
+    throw new Error("休整交易日必须大于等于 0");
+  }
+
+  setStatus("continuousStatus", "运行中...");
+  byId("continuousSummary").innerHTML = "";
+  byId("continuousEvents").innerHTML = "";
+
+  const params = new URLSearchParams({
+    start,
+    end,
+    hold_days: holdDays,
+    min_dte: minDte,
+    sell_profit: sellProfit,
+    rest_days: restDays,
+  });
+  const data = await api(`/api/continuous-straddle/backtest?${params.toString()}`);
+
+  byId("continuousSummary").innerHTML = [
+    ["总收益", money.format(data.total_profit)],
+    ["已实现收益", money.format(data.realized_profit)],
+    ["未实现收益", money.format(data.unrealized_profit)],
+    ["开仓次数", data.entries],
+    ["平仓次数", data.exits],
+    ["胜率", data.exits > 0 ? `${fmt.format((data.winning_exits / data.exits) * 100)}%` : "-"],
+    ["盈亏比", typeof data.profit_loss_ratio === "number" ? fmt.format(data.profit_loss_ratio) : "-"],
+    ["Sharpe", typeof data.sharpe_ratio === "number" ? fmt.format(data.sharpe_ratio) : "-"],
+    ["Alpha", formatPercent(data.alpha)],
+    ["最大回撤", formatPercent(data.max_drawdown)],
+    ["交易日数", data.trading_days],
+    ["最终持仓", data.final_position_open ? "持有中" : "空仓"],
+  ].map(([title, value]) => renderMetric(title, value)).join("");
+
+  byId("continuousEvents").innerHTML = data.events.map((event) => [
+    "<tr>",
+    `  <td>${esc(event.date)}</td>`,
+    `  <td>${esc(event.action)}</td>`,
+    `  <td>${esc(event.reason || "")}</td>`,
+    `  <td>${esc(event.call_contract || "")}</td>`,
+    `  <td>${esc(event.put_contract || "")}</td>`,
+    `  <td class="text-end">${formatOptionalNumber(event.spot_close, fmt)}</td>`,
+    `  <td class="text-end">${typeof event.spot_change_pct === "number" ? `${fmt.format(event.spot_change_pct * 100)}%` : ""}</td>`,
+    `  <td class="text-end">${formatOptionalNumber(event.position_value, money)}</td>`,
+    `  <td class="text-end">${formatOptionalNumber(event.trade_profit, money)}</td>`,
+    `  <td class="text-end">${typeof event.trade_profit_pct === "number" ? `${fmt.format(event.trade_profit_pct * 100)}%` : ""}</td>`,
+    `  <td class="text-end">${money.format(event.cumulative_profit)}</td>`,
+    `  <td class="text-end">${typeof event.days_held === "number" ? event.days_held : ""}</td>`,
+    `  <td class="text-end">${typeof event.days_to_expiry === "number" ? event.days_to_expiry : ""}</td>`,
+    "</tr>",
+  ].join("")).join("");
+
+  setStatus("continuousStatus", `${data.start_date} 到 ${data.end_date} | ${data.calculation_note}`);
+}
+
 byId("refreshContracts").addEventListener("click", () => {
   loadContracts().catch((error) => setStatus("contractStatus", error.message));
 });
@@ -361,6 +446,10 @@ byId("loadStraddleContracts").addEventListener("click", () => {
 
 byId("runStraddleBacktest").addEventListener("click", () => {
   runStraddleBacktest().catch((error) => setStatus("straddleBacktestStatus", error.message));
+});
+
+byId("runContinuousStraddle").addEventListener("click", () => {
+  runContinuousStraddle().catch((error) => setStatus("continuousStatus", error.message));
 });
 
 ["call", "put"].forEach((prefix) => {

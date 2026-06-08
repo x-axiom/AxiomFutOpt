@@ -53,3 +53,42 @@ func (app *App) handleStraddleBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, result)
 }
+
+func (app *App) handleContinuousStraddleBacktest(w http.ResponseWriter, r *http.Request) {
+	start, end, err := requiredDateRange(r)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	holdDays := intParam(r, "hold_days", 10)
+	minDTE := intParam(r, "min_dte", 30)
+	restDays := intParam(r, "rest_days", 1)
+	sellProfit := floatParam(r, "sell_profit", 0.2)
+	if sellProfit > 1 {
+		sellProfit = sellProfit / 100
+	}
+	if holdDays <= 0 {
+		writeError(w, errors.New("hold_days must be > 0"), http.StatusBadRequest)
+		return
+	}
+	if minDTE < 0 {
+		writeError(w, errors.New("min_dte must be >= 0"), http.StatusBadRequest)
+		return
+	}
+	if restDays < 0 {
+		writeError(w, errors.New("rest_days must be >= 0"), http.StatusBadRequest)
+		return
+	}
+	if sellProfit <= 0 {
+		writeError(w, errors.New("sell_profit must be > 0"), http.StatusBadRequest)
+		return
+	}
+
+	result, err := app.store.RunContinuousStraddleBacktest(start, end, holdDays, minDTE, sellProfit, restDays)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, result)
+}

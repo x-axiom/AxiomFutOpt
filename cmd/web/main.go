@@ -153,6 +153,49 @@ type StraddleBacktestResult struct {
 	Rows            []StraddleBacktestRow `json:"rows"`
 }
 
+type ContinuousStraddleEvent struct {
+	Date              string  `json:"date"`
+	Action            string  `json:"action"`
+	Reason            string  `json:"reason,omitempty"`
+	CallContract      string  `json:"call_contract,omitempty"`
+	PutContract       string  `json:"put_contract,omitempty"`
+	SpotClose         float64 `json:"spot_close"`
+	SpotChangePct     float64 `json:"spot_change_pct"`
+	CallClose         float64 `json:"call_close"`
+	PutClose          float64 `json:"put_close"`
+	PositionValue     float64 `json:"position_value"`
+	TradeProfit       float64 `json:"trade_profit"`
+	TradeProfitPct    float64 `json:"trade_profit_pct"`
+	CumulativeProfit  float64 `json:"cumulative_profit"`
+	DaysHeld          int     `json:"days_held"`
+	DaysToExpiry      int     `json:"days_to_expiry"`
+	RestDaysRemaining int     `json:"rest_days_remaining,omitempty"`
+}
+
+type ContinuousStraddleResult struct {
+	StartDate         string                    `json:"start_date"`
+	EndDate           string                    `json:"end_date"`
+	HoldDays          int                       `json:"hold_days"`
+	MinDTE            int                       `json:"min_dte"`
+	SellProfit        float64                   `json:"sell_profit"`
+	RestDays          int                       `json:"rest_days"`
+	TradingDays       int                       `json:"trading_days"`
+	Entries           int                       `json:"entries"`
+	Exits             int                       `json:"exits"`
+	WinningExits      int                       `json:"winning_exits"`
+	TotalProfit       float64                   `json:"total_profit"`
+	RealizedProfit    float64                   `json:"realized_profit"`
+	UnrealizedProfit  float64                   `json:"unrealized_profit"`
+	ProfitLossRatio   float64                   `json:"profit_loss_ratio"`
+	SharpeRatio       float64                   `json:"sharpe_ratio"`
+	Alpha             float64                   `json:"alpha"`
+	MaxDrawdown       float64                   `json:"max_drawdown"`
+	FinalPositionOpen bool                      `json:"final_position_open"`
+	FinalValue        float64                   `json:"final_value"`
+	CalculationNote   string                    `json:"calculation_note"`
+	Events            []ContinuousStraddleEvent `json:"events"`
+}
+
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dataDir := flag.String("data-dir", "extracted", "directory containing CFFEX daily CSV files")
@@ -177,6 +220,7 @@ func main() {
 	mux.HandleFunc("/api/backtest", app.handleBacktest)
 	mux.HandleFunc("/api/straddle/contracts", app.handleStraddleContracts)
 	mux.HandleFunc("/api/straddle/backtest", app.handleStraddleBacktest)
+	mux.HandleFunc("/api/continuous-straddle/backtest", app.handleContinuousStraddleBacktest)
 
 	log.Printf("serving on http://localhost%s", *addr)
 	if err := http.ListenAndServe(*addr, mux); err != nil {

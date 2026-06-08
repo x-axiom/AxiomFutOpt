@@ -68,6 +68,9 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="tab-straddle" type="button" data-page="page-straddle">期权双买回测</button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-continuous-straddle" type="button" data-page="page-continuous-straddle">中证1000期权持续双买策略</button>
+      </li>
     </ul>
 
     <section class="page-panel active" id="page-basis">
@@ -322,6 +325,82 @@
                     </tr>
                   </thead>
                   <tbody id="straddleRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page-panel" id="page-continuous-straddle">
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+              <span>中证1000期权持续双买策略</span>
+              <button class="btn btn-primary btn-sm" id="runContinuousStraddle">运行策略</button>
+            </div>
+            <div class="card-body">
+              <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">开始日期</label>
+                  <input class="form-control" id="continuousStartDate" type="date">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">结束日期</label>
+                  <input class="form-control" id="continuousEndDate" type="date">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">最大持有自然日</label>
+                  <input class="form-control" id="continuousHoldDays" type="number" min="1" step="1" value="10">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">最小 DTE</label>
+                  <input class="form-control" id="continuousMinDte" type="number" min="0" step="1" value="30">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">指数波动比例</label>
+                  <input class="form-control" id="continuousSellProfit" type="number" min="0.0001" step="0.01" value="0.2">
+                </div>
+                <div class="col-6 col-md-4 col-xl-2">
+                  <label class="form-label small text-body-secondary">休整交易日</label>
+                  <input class="form-control" id="continuousRestDays" type="number" min="0" step="1" value="1">
+                </div>
+              </div>
+              <div class="small text-body-secondary mt-3">
+                收盘建仓和平仓；自动选 MO 期权最近满足 DTE 的上下 ATM CALL/PUT，各 1 张。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header">策略结果</div>
+            <div class="card-body">
+              <div class="row g-2 mb-3" id="continuousSummary"></div>
+              <div class="small text-body-secondary mb-2" id="continuousStatus"></div>
+              <div class="events-table">
+                <table class="table table-sm table-striped align-middle mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>日期</th>
+                      <th>动作</th>
+                      <th>原因</th>
+                      <th>CALL</th>
+                      <th>PUT</th>
+                      <th class="text-end">指数</th>
+                      <th class="text-end">指数波动</th>
+                      <th class="text-end">组合市值</th>
+                      <th class="text-end">单次收益</th>
+                      <th class="text-end">单次收益率</th>
+                      <th class="text-end">累计收益</th>
+                      <th class="text-end">持有天数</th>
+                      <th class="text-end">DTE</th>
+                    </tr>
+                  </thead>
+                  <tbody id="continuousEvents"></tbody>
                 </table>
               </div>
             </div>
